@@ -5,7 +5,7 @@
 // (sementara 5, tempe/tahu 10) — sesuaikan dengan Bu Mimin bila perlu.
 // Setelah mengubah BARANG_AWAL, jalankan `npm run db:reset`.
 
-const { hariIni, tambahHari } = require('./lib/waktu');
+const { hariIni, tambahHari, sekarang } = require('./lib/waktu');
 
 const PENGGUNA_AWAL = [
   { nama: 'Bu Mimin', peran: 'admin' },
@@ -54,7 +54,7 @@ function isiDataAwal(db, { barang = BARANG_AWAL } = {}) {
     for (const [nama, satuan, harga, stok, min] of barang) {
       const { lastInsertRowid } = insBarang.run(nama, satuan, harga, stok, min);
       // Stok awal dicatat sebagai stok masuk, supaya riwayat cocok dengan sisa stok.
-      if (stok > 0) insMasuk.run(lastInsertRowid, admin, stok, hari, 'Stok awal');
+      if (stok > 0) insMasuk.run(lastInsertRowid, admin, stok, sekarang(), 'Stok awal');
     }
 
     const insJadwal = db.prepare(

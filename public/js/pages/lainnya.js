@@ -2,8 +2,8 @@
 import { api, esc, rupiah, angka, toast, sesi, sekarangWIB, tanggalPanjang, setErr, clearErr, badgeStatus, inisial, kodePesanan } from '../util.js';
 
 export async function render(app, sub, q) {
-  if (sub === 'transaksi') return penjualan(app, q, true); // menu utama "Transaksi"
-  if (sub === 'penjualan') return penjualan(app, q);
+  // Log penjualan lama dipindah ke halaman Transaksi › Rekap Pemasukan.
+  if (sub === 'penjualan' || sub === 'transaksi') { location.replace(`#/transaksi/rekap${q.tanggal ? `?tanggal=${q.tanggal}` : ''}`); return; }
   if (sub === 'barang') return kelolaBarang(app, q);
   if (sub === 'waktu') return catatanWaktu(app);
   return menu(app);
@@ -32,48 +32,6 @@ function menu(app) {
   app.querySelector('#keluar').addEventListener('click', () => {
     if (confirm('Keluar dari akun ini?')) window.dispatchEvent(new Event('warung:keluar'));
   });
-}
-
-// ---------------------------------------------------------------------
-// Log penjualan (bukti transaksi tersimpan; juga dasar rekap EP-03)
-// ---------------------------------------------------------------------
-async function penjualan(app, q, menuUtama = false) {
-  const tgl = q.tanggal || sekarangWIB().tanggal;
-  app.innerHTML = `
-    ${menuUtama ? '<h1 class="page-title">Riwayat Transaksi</h1>' : kembali('Log penjualan')}
-    <div class="field"><input class="input" type="date" id="tgl" value="${tgl}"></div>
-    <div id="isi"><p class="empty">Memuat…</p></div>`;
-  const isi = app.querySelector('#isi');
-
-  async function muat(t) {
-    const r = await api(`/transaksi?tanggal=${t}`);
-    const s = r.ringkasan;
-    isi.innerHTML = `
-      <p class="small muted" style="margin-top:-4px">${esc(tanggalPanjang(t))}</p>
-      <div class="stats">
-        <div class="stat"><span>Pemasukan</span><b class="num">${rupiah(s.total)}</b></div>
-        <div class="stat"><span>Transaksi</span><b class="num">${angka(s.jumlah_transaksi)}</b></div>
-        <div class="stat"><span>QRIS</span><b class="num">${rupiah(s.total_qris)}</b></div>
-        <div class="stat"><span>Tunai</span><b class="num">${rupiah(s.total_tunai)}</b></div>
-      </div>
-      ${r.transaksi.length ? `<ul class="list">${r.transaksi.map((t) => `
-        <li><details class="trx">
-          <summary class="row">
-            <div class="grow">
-              <b class="num">#${kodePesanan(t.waktu_transaksi, t.nomor_harian)}</b> <span class="badge netral">${t.metode_bayar === 'qris' ? 'QRIS' : 'Tunai'}</span>
-              ${t.nama_pelanggan ? `<div class="trx-pelanggan">${esc(t.nama_pelanggan)}</div>` : ''}
-              <div class="small muted">${t.waktu_transaksi.slice(11, 16).replace(':', '.')} · ${t.items.length} jenis item · ${esc(t.pencatat)}</div>
-            </div>
-            <b class="num">${rupiah(t.total)}</b>
-          </summary>
-          <div class="trx-items">
-            ${t.items.map((i) => `<div><span>${esc(i.nama_barang)} × ${i.jumlah}</span><span class="num">${rupiah(i.subtotal)}</span></div>`).join('')}
-            ${t.catatan ? `<p class="trx-catatan">Catatan: ${esc(t.catatan)}</p>` : ''}
-          </div>
-        </details></li>`).join('')}</ul>` : '<p class="empty">Belum ada transaksi di tanggal ini.</p>'}`;
-  }
-  app.querySelector('#tgl').addEventListener('change', (e) => e.target.value && muat(e.target.value));
-  await muat(tgl);
 }
 
 // ---------------------------------------------------------------------

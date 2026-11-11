@@ -14,6 +14,14 @@
 --
 -- Tambahan setelah ERD revisi (desain halaman Kasir, Nov 2026):
 --   TRANSAKSI.nama_pelanggan dan TRANSAKSI.catatan (keduanya opsional).
+-- Tambahan dari desain halaman Stok (Nov 2026):
+--   STOK_KELUAR.catatan (opsional), mis. "jatuh", "tidak layak konsumsi".
+--   STOK_MASUK.tanggal_masuk kini berisi tanggal+jam 'YYYY-MM-DD HH:MM:SS'
+--   bila diisi otomatis (form baru); data lama 'YYYY-MM-DD' tetap sah.
+-- Tambahan dari desain halaman Transaksi (Nov 2026):
+--   TRANSAKSI.status: belum_selesai → selesai / dibatalkan (pembatalan
+--   mengembalikan stok lewat STOK_MASUK). Transaksi lama dianggap selesai.
+--   TRANSAKSI.uang_diterima: uang tunai dari pelanggan (opsional), untuk kembalian.
 --   Database lama otomatis ditambah kolomnya oleh src/db.js.
 --
 -- Catatan tipe: SQLite tidak punya tipe date/time/decimal/boolean asli.
@@ -58,7 +66,10 @@ CREATE TABLE IF NOT EXISTS TRANSAKSI (
   metode_bayar    TEXT    NOT NULL CHECK (metode_bayar IN ('qris', 'tunai')),
   total           INTEGER NOT NULL CHECK (total >= 0),
   nama_pelanggan  TEXT,   -- opsional (desain Kasir)
-  catatan         TEXT    -- opsional, mis. "tidak pedas"
+  catatan         TEXT,   -- opsional, mis. "tidak pedas"
+  status          TEXT    NOT NULL DEFAULT 'belum_selesai'
+                  CHECK (status IN ('belum_selesai', 'selesai', 'dibatalkan')),
+  uang_diterima   INTEGER CHECK (uang_diterima IS NULL OR uang_diterima >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS DETAIL_TRANSAKSI (
@@ -77,7 +88,8 @@ CREATE TABLE IF NOT EXISTS STOK_KELUAR (
   id_transaksi  INTEGER          REFERENCES TRANSAKSI(id_transaksi), -- boleh kosong (rusak/lainnya)
   jumlah        INTEGER NOT NULL CHECK (jumlah > 0),
   alasan        TEXT    NOT NULL CHECK (alasan IN ('terjual', 'rusak', 'lainnya')),
-  waktu_keluar  TEXT    NOT NULL
+  waktu_keluar  TEXT    NOT NULL,
+  catatan       TEXT    -- opsional (desain Stok)
 );
 
 CREATE TABLE IF NOT EXISTS JADWAL_BUKA_TUTUP (

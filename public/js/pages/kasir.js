@@ -255,6 +255,10 @@ export async function render(app) {
       $('#metode').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    const uangRaw = metode === 'tunai' ? uangEl.value.replace(/\D/g, '') : '';
+    if (uangRaw && Number(uangRaw) < total()) {
+      return tunjukkan(`Uang diterima kurang dari total pembayaran (${rupiah(total())}).`, uangEl);
+    }
 
     const btn = $('#btn-simpan');
     btn.disabled = true;
@@ -266,13 +270,14 @@ export async function render(app) {
           metode_bayar: metode,
           nama_pelanggan: $('#nama-pelanggan').value,
           catatan: $('#catatan-pesanan').value,
+          uang_diterima: uangRaw ? Number(uangRaw) : null,
           items: [...keranjang].map(([id_barang, jumlah]) => ({ id_barang, jumlah })),
         },
       });
       const durasi = Math.round((performance.now() - mulai) / 100) / 10;
       const kode = kodePesanan(trx.waktu_transaksi, trx.nomor_harian);
       simpanWaktu({ id_transaksi: trx.id_transaksi, kode, detik: durasi, item: trx.items.length, metode, waktu: trx.waktu_transaksi });
-      toast(`Transaksi #${kode} tersimpan · ${rupiah(trx.total)} · ${metode.toUpperCase()} · ${durasi} detik`, 'ok', 4500);
+      toast(`Transaksi #${kode} tersimpan · ${rupiah(trx.total)} · ${metode.toUpperCase()} · ${durasi} detik. Tandai Selesai di Transaksi saat pesanan diantar.`, 'ok', 5000);
       // Siap untuk pesanan berikutnya
       nomorBerikut = trx.nomor_harian + 1;
       barang = (await api('/barang')).sort((a, b) => a.id_barang - b.id_barang);

@@ -6,10 +6,18 @@ const v = require('../lib/validasi');
 const { sekarang, hariIni, tanggalValid } = require('../lib/waktu');
 
 const METODE = ['qris', 'tunai'];
+const STATUS_AKHIR = ['selesai', 'dibatalkan'];
+
+/** Kode pesanan WU-YYMMDD-NNN (sama dengan tampilan). */
+function kodePesanan(waktu, nomor) {
+  const [y, m, d] = String(waktu).slice(0, 10).split('-');
+  return `WU-${y.slice(2)}${m}${d}-${String(nomor).padStart(3, '0')}`;
+}
 
 module.exports = function layananTransaksi(db, barang, stok) {
   const insTrx = db.prepare(
-    'INSERT INTO TRANSAKSI (id_pengguna, waktu_transaksi, metode_bayar, total, nama_pelanggan, catatan) VALUES (?, ?, ?, ?, ?, ?)'
+    `INSERT INTO TRANSAKSI (id_pengguna, waktu_transaksi, metode_bayar, total, nama_pelanggan, catatan, status, uang_diterima)
+     VALUES (?, ?, ?, ?, ?, ?, 'belum_selesai', ?)`
   );
   const insDetail = db.prepare(
     'INSERT INTO DETAIL_TRANSAKSI (id_transaksi, id_barang, jumlah, harga_satuan, subtotal) VALUES (?, ?, ?, ?, ?)'
@@ -39,6 +47,9 @@ module.exports = function layananTransaksi(db, barang, stok) {
     const items = rapikanItem(input.items);
     const namaPelanggan = v.teksOpsional(input.nama_pelanggan, 60);
     const catatan = v.teksOpsional(input.catatan, 200);
+    // Uang diterima hanya untuk tunai, opsional (untuk mencatat kembalian).
+    const adaUang = metode === 'tunai' && input.uang_diterima !== undefined && input.uang_diterima !== null && String(input.uang_diterima).trim() !== '';
+    const uang = adaUang ? v.bilanganBulatNonNegatif(input.uang_diterima, 'uang_diterima', 'Uang diterima') : null;
 
     const id = db.transaction(() => {
       const waktu = sekarang();
@@ -59,8 +70,11 @@ module.exports = function layananTransaksi(db, barang, stok) {
         return { ...it, harga_satuan: b.harga_jual, subtotal: b.harga_jual * it.jumlah };
       });
       const total = baris.reduce((s, x) => s + x.subtotal, 0);
+      if (uang !== null && uang < total) {
+        throw new v.ValidasiError(`Uang diterima kurang dari total pembayaran (Rp${total.toLocaleString('id-ID')}).`, 'uang_diterima');
+      }
 
-      const idTrx = insTrx.run(idPengguna, waktu, metode, total, namaPelanggan, catatan).lastInsertRowid;
+      const idTrx = insTrx.run(idPengguna, waktu, metode, total, namaPelanggan, catatan, uang).lastInsertRowid;
       for (const x of baris) {
         insDetail.run(idTrx, x.id_barang, x.jumlah, x.harga_satuan, x.subtotal);
         stok.kurangiDalamTransaksi(
@@ -107,13 +121,66 @@ module.exports = function layananTransaksi(db, barang, stok) {
       )
       .all(tanggal)
       .map((r) => ambil(r.id_transaksi));
-    const ringkasan = { jumlah_transaksi: daftar.length, total: 0, total_qris: 0, total_tunai: 0 };
+    // Pemasukan = semua transaksi yang tidak dibatalkan (pembayaran sudah diterima di kasir).
+    const ringkasan = {
+      jumlah_transaksi: daftar.length, // semua, termasuk dibatalkan
+      jumlah_dihitung: 0, belum_selesai: 0, selesai: 0, dibatalkan: 0,
+      total: 0, total_qris: 0, total_tunai: 0,
+    };
     for (const t of daftar) {
+      ringkasan[t.status] += 1;
+      if (t.status === 'dibatalkan') continue;
+      ringkasan.jumlah_dihitung += 1;
       ringkasan.total += t.total;
       ringkasan[t.metode_bayar === 'qris' ? 'total_qris' : 'total_tunai'] += t.total;
     }
     return { tanggal, ringkasan, transaksi: daftar };
   }
 
-  return { simpan, ambil, logHarian, METODE };
+  const qUbahStatus = db.prepare("UPDATE TRANSAKSI SET status = ? WHERE id_transaksi = ? AND status = 'belum_selesai'");
+
+  /**
+   * Ubah status pesanan: hanya dari belum_selesai ke selesai atau dibatalkan.
+   * Pembatalan mengembalikan stok setiap item (dicatat di riwayat stok).
+   */
+  function ubahStatus(id, input, idPengguna) {
+    const status = String(input.status || '').toLowerCase();
+    if (!STATUS_AKHIR.includes(status)) throw new v.ValidasiError('Status harus selesai atau dibatalkan.', 'status');
+    const t = ambil(id);
+    if (!t) throw new v.ValidasiError('Transaksi tidak ditemukan.', 'id', 404);
+    if (t.status !== 'belum_selesai') {
+      throw new v.ValidasiError(`Transaksi ini sudah ${t.status === 'selesai' ? 'selesai' : 'dibatalkan'}, statusnya tidak bisa diubah lagi.`, 'status', 409);
+    }
+    db.transaction(() => {
+      if (qUbahStatus.run(status, t.id_transaksi).changes !== 1) {
+        throw new v.ValidasiError('Status transaksi baru saja berubah. Muat ulang halaman.', 'status', 409);
+      }
+      if (status === 'dibatalkan') {
+        const kode = kodePesanan(t.waktu_transaksi, t.nomor_harian);
+        for (const it of t.items) {
+          stok.kembalikanDalamTransaksi({ id_barang: it.id_barang, jumlah: it.jumlah, catatan: `Pembatalan pesanan ${kode}` }, idPengguna);
+        }
+      }
+    })();
+    return ambil(t.id_transaksi);
+  }
+
+  /** Menu terlaris satu tanggal: hanya dari transaksi SELESAI, terbanyak di atas. */
+  function terlaris(tanggal = hariIni()) {
+    if (!tanggalValid(tanggal)) throw new v.ValidasiError('Tanggal tidak valid.', 'tanggal');
+    const menu = db
+      .prepare(
+        `SELECT d.id_barang, b.nama_barang, b.satuan, SUM(d.jumlah) AS jumlah, SUM(d.subtotal) AS pemasukan
+           FROM DETAIL_TRANSAKSI d
+           JOIN TRANSAKSI t USING (id_transaksi)
+           JOIN BARANG b ON b.id_barang = d.id_barang
+          WHERE t.status = 'selesai' AND substr(t.waktu_transaksi, 1, 10) = ?
+          GROUP BY d.id_barang
+          ORDER BY jumlah DESC, b.nama_barang COLLATE NOCASE`
+      )
+      .all(tanggal);
+    return { tanggal, menu };
+  }
+
+  return { simpan, ambil, logHarian, ubahStatus, terlaris, METODE };
 };

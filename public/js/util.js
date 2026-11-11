@@ -92,7 +92,10 @@ export function toast(pesan, jenis = '', ms = 3200) {
   const el = document.createElement('div');
   el.className = `toast ${jenis}`;
   el.setAttribute('role', 'status');
-  el.textContent = pesan;
+  if (jenis === 'ok') {
+    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+  }
+  el.append(document.createTextNode(pesan));
   wrap.replaceChildren(el);
   setTimeout(() => el.remove(), ms);
 }

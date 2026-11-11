@@ -73,7 +73,7 @@ function buatApp(db) {
   // ---------- STOK (EP-01 US-02) ----------
   api.post('/stok/masuk', wajibPengguna, (req, res) => res.status(201).json(stok.catatMasuk(req.body || {}, req.pengguna.id_pengguna)));
   api.post('/stok/keluar', wajibPengguna, (req, res) => res.status(201).json(stok.catatKeluar(req.body || {}, req.pengguna.id_pengguna)));
-  api.get('/stok/riwayat', (req, res) => res.json(stok.riwayat({ id_barang: req.query.id_barang, limit: req.query.limit })));
+  api.get('/stok/riwayat', (req, res) => res.json(stok.riwayat({ id_barang: req.query.id_barang, tanggal: req.query.tanggal, limit: req.query.limit })));
 
   // ---------- JADWAL (EP-01 US-03) ----------
   api.get('/jadwal', (req, res) => res.json(jadwal.rentang(req.query.dari || hariIni(), req.query.hari || 8)));
@@ -85,6 +85,8 @@ function buatApp(db) {
   // ---------- TRANSAKSI (EP-02 US-05) ----------
   api.post('/transaksi', wajibPengguna, (req, res) => res.status(201).json(transaksi.simpan(req.body || {}, req.pengguna.id_pengguna)));
   api.get('/transaksi', (req, res) => res.json(transaksi.logHarian(req.query.tanggal || hariIni())));
+  api.get('/transaksi/terlaris', (req, res) => res.json(transaksi.terlaris(req.query.tanggal || hariIni())));
+  api.patch('/transaksi/:id/status', wajibPengguna, (req, res) => res.json(transaksi.ubahStatus(req.params.id, req.body || {}, req.pengguna.id_pengguna)));
   api.get('/transaksi/:id', (req, res) => {
     const t = transaksi.ambil(req.params.id);
     if (!t) throw new ValidasiError('Transaksi tidak ditemukan.', 'id', 404);

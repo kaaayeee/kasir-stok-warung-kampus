@@ -6,6 +6,7 @@ import * as stok from './pages/stok.js';
 import * as jadwal from './pages/jadwal.js';
 import * as lainnya from './pages/lainnya.js';
 import * as bantuan from './pages/bantuan.js';
+import * as transaksi from './pages/transaksi.js';
 import { tampilkanMasuk } from './pages/auth.js';
 import { tampilkanOnboarding } from './pages/onboarding.js';
 
@@ -17,7 +18,7 @@ const rute = {
   kasir: (sub, q) => kasir.render(app, q),
   stok: (sub, q) => stok.render(app, sub || 'daftar', q),
   jadwal: (sub, q) => jadwal.render(app, q),
-  transaksi: (sub, q) => lainnya.render(app, 'transaksi', q),
+  transaksi: (sub, q) => transaksi.render(app, sub, q),
   lainnya: (sub, q) => lainnya.render(app, sub || 'menu', q),
   bantuan: (sub) => bantuan.render(app, sub),
 };

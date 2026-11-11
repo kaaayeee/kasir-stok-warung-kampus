@@ -1,275 +1,201 @@
 // EP-01 US-02 — Stok: daftar sisa stok, form stok masuk, form stok keluar, riwayat.
-import { api, esc, angka, toast, cekJumlah, setErr, clearErr, ikonCari, badgeStatus, sekarangWIB, infoTanggal } from '../util.js';
+// Stok tidak boleh minus: dicek di form, di server, dan di database.
+import { api, esc, angka, rupiah, toast, cekJumlah, setErr, clearErr, ikonCari, sekarangWIB, infoTanggal, kapital } from '../util.js';
+import { ikon } from './auth.js';
 
-const TAB = [
-  ['daftar', 'Sisa stok'],
-  ['masuk', 'Masuk'],
-  ['keluar', 'Keluar'],
-  ['riwayat', 'Riwayat'],
-];
+const ikonSegarkan = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+const ikonX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
-function tabs(aktif) {
-  return `<nav class="seg">${TAB.map(([k, l]) => `<a href="#/stok/${k}" class="${k === aktif ? 'active' : ''}">${l}</a>`).join('')}</nav>`;
-}
+/** Urutan menu = urutan barang dimasukkan (sama dengan Kasir). */
+const urutMenu = (rows) => rows.sort((a, b) => a.id_barang - b.id_barang);
 
 export async function render(app, sub, q) {
-  if (sub === 'masuk') return formMasuk(app, q);
-  if (sub === 'keluar') return formKeluar(app, q);
+  if (sub === 'masuk') return formStok(app, q, 'masuk');
+  if (sub === 'keluar') return formStok(app, q, 'keluar');
   if (sub === 'riwayat') return riwayat(app, q);
-  return daftar(app, q);
+  return daftar(app);
+}
+
+/** Kolom cari dengan tombol × untuk mengosongkan. */
+function kolomCari(id, placeholder) {
+  return `
+    <label class="bantuan-cari-input ada-hapus">
+      ${ikonCari}
+      <input type="search" id="${id}" placeholder="${placeholder}" aria-label="${placeholder.replace('…', '')}" autocomplete="off">
+      <button type="button" class="cari-hapus hidden" aria-label="Kosongkan pencarian">${ikonX}</button>
+    </label>`;
+}
+function pasangCari(app, id, onUbah) {
+  const input = app.querySelector(`#${id}`);
+  const hapus = input.parentElement.querySelector('.cari-hapus');
+  const ubah = () => { hapus.classList.toggle('hidden', !input.value); onUbah(input.value.trim()); };
+  input.addEventListener('input', ubah);
+  hapus.addEventListener('click', () => { input.value = ''; ubah(); input.focus(); });
 }
 
 // ---------------------------------------------------------------------
 // Daftar sisa stok
 // ---------------------------------------------------------------------
-async function daftar(app, q) {
-  let filter = q.filter || 'semua';
+async function daftar(app) {
   let kata = '';
   app.innerHTML = `
-    <h1 class="page-title">Stok</h1>
-    ${tabs('daftar')}
-    <div class="summary-strip" id="ringkas"></div>
-    <div class="search">${ikonCari}<input class="input" id="cari" type="search" placeholder="Cari nama barang…" autocomplete="off"></div>
-    <ul class="list" id="list"><li class="empty">Memuat…</li></ul>`;
+    <section class="bantuan-card stok-hero">
+      <h1>Stok</h1>
+      <nav class="stok-aksi" aria-label="Aksi stok">
+        <a href="#/stok/masuk">Masuk</a>
+        <a href="#/stok/keluar">Keluar</a>
+        <a href="#/stok/riwayat">Riwayat</a>
+      </nav>
+    </section>
+    <div class="bantuan-card bantuan-cari">${kolomCari('cari', 'Cari nama menu…')}</div>
+    <div class="stok-list" id="list"><p class="empty">Memuat…</p></div>`;
 
   const listEl = app.querySelector('#list');
-  const ringkas = app.querySelector('#ringkas');
   let semua = [];
 
   function tampil() {
-    const n = { semua: semua.length, menipis: 0, habis: 0 };
-    semua.forEach((b) => { if (b.status === 'habis') n.habis++; else if (b.status === 'menipis') n.menipis++; });
-    ringkas.innerHTML = [
-      ['semua', 'Barang aktif'],
-      ['menipis', 'Menipis'],
-      ['habis', 'Habis'],
-    ].map(([k, l]) => `<button data-f="${k}" aria-pressed="${filter === k}"><b class="num">${n[k]}</b><span>${l}</span></button>`).join('');
-
     const k = kata.toLowerCase();
-    const rows = semua.filter((b) => (filter === 'semua' || b.status === filter) && b.nama_barang.toLowerCase().includes(k));
+    const rows = semua.filter((b) => b.nama_barang.toLowerCase().includes(k));
     if (!rows.length) {
-      listEl.innerHTML = `<li class="empty">${kata ? `Tidak ada barang dengan nama “${esc(kata)}”.` : 'Tidak ada barang di kategori ini.'}</li>`;
+      listEl.innerHTML = `<p class="empty">${kata ? `Tidak ada menu dengan nama “${esc(kata)}”.` : 'Belum ada menu.'}</p>`;
       return;
     }
+    const label = { aman: 'Stok aman', menipis: 'Stok menipis', habis: 'Stok habis' };
     listEl.innerHTML = rows.map((b) => `
-      <li class="stok-item ${b.status}" data-id="${b.id_barang}">
-        <div class="row">
-          <div class="grow">
-            <div class="ellipsis"><b>${esc(b.nama_barang)}</b></div>
-            <div class="small muted">${badgeStatus(b.status)} min. ${angka(b.stok_minimum)} ${esc(b.satuan)}</div>
-          </div>
-          <div class="qty num">${angka(b.stok_saat_ini)}<small>${esc(b.satuan)}</small></div>
+      <article class="stok-kartu">
+        <div class="menu-item-baris">
+          <h3>${esc(b.nama_barang)}</h3>
+          <span class="qty-badge num ${b.status}" title="${label[b.status]} (minimum ${angka(b.stok_minimum)})"
+                aria-label="${label[b.status]}: ${angka(b.stok_saat_ini)} ${esc(b.satuan)}">${angka(b.stok_saat_ini)}</span>
         </div>
-        <div class="mini-actions">
-          <a class="btn sm" href="#/stok/masuk?barang=${b.id_barang}">+ Masuk</a>
-          <a class="btn sm" href="#/stok/keluar?barang=${b.id_barang}">− Keluar</a>
+        <div class="menu-item-baris bawah">
+          <span class="chip-satuan">${esc(kapital(b.satuan))}</span>
+          <b class="num">${rupiah(b.harga_jual)}</b>
         </div>
-      </li>`).join('');
+      </article>`).join('');
   }
 
-  ringkas.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-f]');
-    if (!b) return;
-    filter = b.dataset.f;
-    tampil();
-  });
-  app.querySelector('#cari').addEventListener('input', (e) => { kata = e.target.value.trim(); tampil(); });
-
-  semua = await api('/barang');
+  pasangCari(app, 'cari', (v) => { kata = v; tampil(); });
+  semua = urutMenu(await api('/barang'));
   tampil();
 }
 
 // ---------------------------------------------------------------------
-// Pilihan barang (dipakai form masuk & keluar)
+// Form stok masuk / stok keluar (satu kerangka, beda isian alasan)
 // ---------------------------------------------------------------------
-function opsiBarang(barang, terpilih) {
-  return `<option value="">— Pilih barang —</option>` + barang.map((b) =>
-    `<option value="${b.id_barang}" ${String(b.id_barang) === String(terpilih) ? 'selected' : ''}>${esc(b.nama_barang)} (sisa ${angka(b.stok_saat_ini)} ${esc(b.satuan)})</option>`
-  ).join('');
-}
-
-// ---------------------------------------------------------------------
-// Form stok masuk
-// ---------------------------------------------------------------------
-async function formMasuk(app, q) {
-  const barang = await api('/barang');
-  const hariIni = sekarangWIB().tanggal;
-  app.innerHTML = `
-    <h1 class="page-title">Stok</h1>
-    ${tabs('masuk')}
-    <div id="hasil"></div>
-    <form class="card" id="f" novalidate>
-      <div class="field">
-        <label for="id_barang">Barang</label>
-        <select class="input" id="id_barang" name="id_barang">${opsiBarang(barang, q.barang)}</select>
-        <div class="err" data-err="id_barang"></div>
-      </div>
-      <div class="field">
-        <label for="jumlah">Jumlah masuk</label>
-        <input class="input big num" id="jumlah" name="jumlah" type="text" inputmode="numeric" autocomplete="off" placeholder="0">
-        <div class="hint" id="info-sisa"></div>
-        <div class="err" data-err="jumlah"></div>
-      </div>
-      <div class="field">
-        <label for="tanggal_masuk">Tanggal masuk</label>
-        <input class="input" id="tanggal_masuk" name="tanggal_masuk" type="date" value="${hariIni}" max="${hariIni}">
-        <div class="err" data-err="tanggal_masuk"></div>
-      </div>
-      <div class="field">
-        <label for="catatan">Catatan <span class="muted">(opsional)</span></label>
-        <input class="input" id="catatan" name="catatan" type="text" maxlength="200" placeholder="mis. dari supplier Pak Budi">
-      </div>
-      <button class="btn primary block lg" type="submit">Simpan stok masuk</button>
-    </form>`;
-
-  const f = app.querySelector('#f');
-  const hasil = app.querySelector('#hasil');
-  const info = app.querySelector('#info-sisa');
+async function formStok(app, q, jenis) {
+  const keluar = jenis === 'keluar';
+  const Judul = keluar ? 'Keluar' : 'Masuk';
+  const barang = urutMenu(await api('/barang'));
   const peta = new Map(barang.map((b) => [String(b.id_barang), b]));
-  const tampilSisa = () => {
-    const b = peta.get(f.id_barang.value);
-    info.textContent = b ? `Sisa stok sekarang: ${angka(b.stok_saat_ini)} ${b.satuan}` : '';
-  };
-  f.id_barang.addEventListener('change', tampilSisa);
-  tampilSisa();
-  if (q.barang) f.jumlah.focus();
 
-  f.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    clearErr(f);
-    hasil.innerHTML = '';
-    let ok = true;
-    if (!f.id_barang.value) { setErr(f, 'id_barang', 'Barang wajib dipilih.'); ok = false; }
-    const [jumlah, errJ] = cekJumlah(f.jumlah.value);
-    if (errJ) { setErr(f, 'jumlah', errJ); ok = false; }
-    if (!f.tanggal_masuk.value) { setErr(f, 'tanggal_masuk', 'Tanggal masuk wajib diisi.'); ok = false; }
-    if (!ok) return;
-
-    const tombol = f.querySelector('button[type=submit]');
-    tombol.disabled = true;
-    try {
-      const r = await api('/stok/masuk', {
-        method: 'POST',
-        body: { id_barang: Number(f.id_barang.value), jumlah, tanggal_masuk: f.tanggal_masuk.value, catatan: f.catatan.value },
-      });
-      const b = r.barang;
-      peta.set(String(b.id_barang), b);
-      hasil.innerHTML = `<div class="notice ok">Tersimpan: +${angka(jumlah)} ${esc(b.satuan)} ${esc(b.nama_barang)}. Sisa stok sekarang <b>${angka(b.stok_saat_ini)} ${esc(b.satuan)}</b>.</div>`;
-      toast('Stok masuk tersimpan', 'ok');
-      // Kosongkan form untuk input berikutnya; perbarui angka sisa di pilihan barang.
-      f.id_barang.innerHTML = opsiBarang([...peta.values()].sort((a, c) => a.nama_barang.localeCompare(c.nama_barang)), '');
-      f.jumlah.value = '';
-      f.catatan.value = '';
-      f.tanggal_masuk.value = sekarangWIB().tanggal;
-      tampilSisa();
-    } catch (err) {
-      if (err.field && f.querySelector(`[data-err="${err.field}"]`)) setErr(f, err.field, err.message);
-      else hasil.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
-    } finally {
-      tombol.disabled = false;
-    }
-  });
-}
-
-// ---------------------------------------------------------------------
-// Form stok keluar (tidak boleh membuat stok negatif)
-// ---------------------------------------------------------------------
-async function formKeluar(app, q) {
-  const barang = await api('/barang');
   app.innerHTML = `
-    <h1 class="page-title">Stok</h1>
-    ${tabs('keluar')}
-    <div id="hasil"></div>
-    <form class="card" id="f" novalidate>
+    <a href="#/stok" class="btn-kembali">${ikon.kiri} Kembali ke Stok</a>
+    <form class="bantuan-card stok-form" id="f" novalidate>
+      <h1>Input Stok ${Judul}</h1>
+      <p class="panduan-sub">Masukkan rincian item menu dan kuantitas persediaan</p>
       <div class="field">
-        <label for="id_barang">Barang</label>
-        <select class="input" id="id_barang" name="id_barang">${opsiBarang(barang, q.barang)}</select>
+        <label for="id_barang">Menu <span class="wajib">*</span></label>
+        <select class="input" id="id_barang" name="id_barang">
+          <option value="">-- Pilih Menu --</option>
+          ${barang.map((b) => `<option value="${b.id_barang}" ${String(b.id_barang) === String(q.barang) ? 'selected' : ''}>${esc(b.nama_barang)}</option>`).join('')}
+        </select>
+        <div class="hint" id="info-sisa"></div>
         <div class="err" data-err="id_barang"></div>
       </div>
       <div class="field">
-        <label for="jumlah">Jumlah keluar</label>
-        <input class="input big num" id="jumlah" name="jumlah" type="text" inputmode="numeric" autocomplete="off" placeholder="0">
-        <div class="hint" id="info-sisa"></div>
-        <div class="err" data-err="jumlah"></div>
-      </div>
-      <div class="field">
-        <span class="label">Alasan</span>
-        <div class="pills" id="alasan">
-          <button type="button" class="pill" data-v="terjual" aria-pressed="false">Terjual</button>
-          <button type="button" class="pill" data-v="rusak" aria-pressed="false">Rusak</button>
-          <button type="button" class="pill" data-v="lainnya" aria-pressed="false">Lainnya</button>
+        <label for="jumlah">Jumlah ${Judul} <span class="wajib">*</span></label>
+        <div class="stepper-besar">
+          <button type="button" data-langkah="-1" aria-label="Kurangi jumlah">−</button>
+          <input class="num" id="jumlah" name="jumlah" inputmode="numeric" autocomplete="off" value="0">
+          <button type="button" data-langkah="1" aria-label="Tambah jumlah">+</button>
         </div>
-        <input type="hidden" name="alasan" value="">
-        <div class="hint">Penjualan dari menu Kasir sudah otomatis mengurangi stok. Form ini untuk pencatatan di luar kasir.</div>
-        <div class="err" data-err="alasan"></div>
+        <div class="err" data-err="jumlah"></div>
       </div>
-      <p class="small muted" style="margin:-4px 0 14px">Waktu keluar dan pencatat terisi otomatis.</p>
-      <button class="btn primary block lg" type="submit">Simpan stok keluar</button>
+      ${keluar ? `
+      <div class="field">
+        <label for="alasan">Alasan Keluar <span class="wajib">*</span></label>
+        <select class="input" id="alasan" name="alasan">
+          <option value="">-- Pilih Alasan --</option>
+          <option value="rusak">Rusak</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+        <div class="err" data-err="alasan"></div>
+      </div>` : ''}
+      <div class="field">
+        <label for="catatan">Catatan Tambahan <span class="muted">(Opsional)</span></label>
+        <textarea class="input" id="catatan" name="catatan" rows="3" maxlength="200" placeholder="Contoh: Stok ${jenis}"></textarea>
+      </div>
+      ${keluar ? '<p class="small muted stok-form-catatan">Penjualan dari Kasir sudah otomatis mengurangi stok. Form ini untuk barang yang berkurang di luar kasir.</p>' : ''}
+      <button class="btn primary block" type="submit">Simpan Stok ${Judul}</button>
+      <a href="#/stok" class="btn block btn-batal">Batal</a>
     </form>`;
 
   const f = app.querySelector('#f');
-  const hasil = app.querySelector('#hasil');
   const info = app.querySelector('#info-sisa');
-  const peta = new Map(barang.map((b) => [String(b.id_barang), b]));
+  const labelJumlah = `Jumlah ${jenis}`;
 
   const tampilSisa = () => {
     const b = peta.get(f.id_barang.value);
-    info.innerHTML = b
-      ? `Sisa stok: <b class="num">${angka(b.stok_saat_ini)} ${esc(b.satuan)}</b> — jumlah keluar tidak boleh lebih dari ini.`
-      : '';
-    f.jumlah.max = b ? b.stok_saat_ini : '';
+    info.innerHTML = b ? `Sisa stok sekarang: <b class="num">${angka(b.stok_saat_ini)} ${esc(b.satuan)}</b>` : '';
   };
-  f.id_barang.addEventListener('change', () => { tampilSisa(); setErr(f, 'jumlah', ''); });
-  tampilSisa();
-  if (q.barang) f.jumlah.focus();
 
-  app.querySelector('#alasan').addEventListener('click', (e) => {
-    const b = e.target.closest('.pill');
-    if (!b) return;
-    app.querySelectorAll('#alasan .pill').forEach((p) => p.setAttribute('aria-pressed', String(p === b)));
-    f.alasan.value = b.dataset.v;
-    setErr(f, 'alasan', '');
-  });
-
-  // Peringatan langsung saat mengetik jumlah yang melebihi sisa.
-  f.jumlah.addEventListener('input', () => {
+  /** Validasi jumlah; pesan "belum diisi" untuk kosong/0 seperti di desain. */
+  function cekJumlahForm() {
+    const raw = f.jumlah.value.trim();
+    if (!raw || raw === '0') return [null, `${kapital(labelJumlah)} belum diisi`];
+    const [n, err] = cekJumlah(raw, kapital(labelJumlah));
+    if (err) return [null, err];
     const b = peta.get(f.id_barang.value);
-    const [n] = cekJumlah(f.jumlah.value);
-    if (b && n && n > b.stok_saat_ini) setErr(f, 'jumlah', `Stok tidak cukup. Sisa stok: ${b.stok_saat_ini} ${b.satuan}.`);
-    else setErr(f, 'jumlah', '');
+    if (keluar && b && n > b.stok_saat_ini) return [null, `Stok tidak cukup. Sisa stok: ${b.stok_saat_ini} ${b.satuan}.`];
+    return [n, ''];
+  }
+
+  f.id_barang.addEventListener('change', () => {
+    tampilSisa();
+    setErr(f, 'id_barang', '');
+    if (keluar && f.jumlah.value !== '0') setErr(f, 'jumlah', cekJumlahForm()[1]);
   });
+  f.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-langkah]');
+    if (!t) return;
+    const n = Number(f.jumlah.value.replace(/\D/g, '')) || 0;
+    f.jumlah.value = String(Math.max(0, n + Number(t.dataset.langkah)));
+    setErr(f, 'jumlah', f.jumlah.value === '0' ? '' : cekJumlahForm()[1]);
+  });
+  f.jumlah.addEventListener('focus', () => { if (f.jumlah.value === '0') f.jumlah.select(); });
+  f.jumlah.addEventListener('input', () => setErr(f, 'jumlah', f.jumlah.value.trim() && f.jumlah.value !== '0' ? cekJumlahForm()[1] : ''));
+  if (keluar) f.alasan.addEventListener('change', () => setErr(f, 'alasan', ''));
+  tampilSisa();
 
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearErr(f);
-    hasil.innerHTML = '';
     let ok = true;
     const b = peta.get(f.id_barang.value);
-    if (!b) { setErr(f, 'id_barang', 'Barang wajib dipilih.'); ok = false; }
-    const [jumlah, errJ] = cekJumlah(f.jumlah.value);
+    if (!b) { setErr(f, 'id_barang', 'Menu belum dipilih'); ok = false; }
+    const [jumlah, errJ] = cekJumlahForm();
     if (errJ) { setErr(f, 'jumlah', errJ); ok = false; }
-    else if (b && jumlah > b.stok_saat_ini) { setErr(f, 'jumlah', `Stok tidak cukup. Sisa stok: ${b.stok_saat_ini} ${b.satuan}.`); ok = false; }
-    if (!f.alasan.value) { setErr(f, 'alasan', 'Alasan wajib dipilih.'); ok = false; }
-    if (!ok) return;
+    if (keluar && !f.alasan.value) { setErr(f, 'alasan', 'Alasan keluar belum dipilih'); ok = false; }
+    if (!ok) { f.querySelector('[aria-invalid="true"]')?.focus(); return; }
 
     const tombol = f.querySelector('button[type=submit]');
     tombol.disabled = true;
     try {
-      const r = await api('/stok/keluar', { method: 'POST', body: { id_barang: b.id_barang, jumlah, alasan: f.alasan.value } });
-      const nb = r.barang;
-      peta.set(String(nb.id_barang), nb);
-      hasil.innerHTML = `<div class="notice ok">Tersimpan: −${angka(jumlah)} ${esc(nb.satuan)} ${esc(nb.nama_barang)} (${esc(f.alasan.value)}). Sisa stok sekarang <b>${angka(nb.stok_saat_ini)} ${esc(nb.satuan)}</b>.</div>`;
-      toast('Stok keluar tersimpan', 'ok');
-      f.id_barang.innerHTML = opsiBarang([...peta.values()].sort((a, c) => a.nama_barang.localeCompare(c.nama_barang)), '');
-      f.jumlah.value = '';
-      f.alasan.value = '';
-      app.querySelectorAll('#alasan .pill').forEach((p) => p.setAttribute('aria-pressed', 'false'));
+      const body = { id_barang: b.id_barang, jumlah, catatan: f.catatan.value };
+      if (keluar) body.alasan = f.alasan.value;
+      const r = await api(`/stok/${jenis}`, { method: 'POST', body });
+      peta.set(String(r.barang.id_barang), r.barang);
+      toast(`Stok ${jenis} berhasil disimpan`, 'ok');
+      // Siap untuk input berikutnya: menu tetap terpilih, sisa stok diperbarui.
+      f.jumlah.value = '0';
+      f.catatan.value = '';
+      if (keluar) f.alasan.value = '';
       tampilSisa();
     } catch (err) {
-      // Penolakan dari server (mis. stok berubah karena transaksi lain) tampil di field jumlah.
+      // Penolakan server (mis. stok berubah karena transaksi lain) tampil di field terkait.
       if (err.field && f.querySelector(`[data-err="${err.field}"]`)) setErr(f, err.field, err.message);
-      else hasil.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
-      // Muat ulang sisa stok terbaru.
+      else toast(err.message, 'err');
       const segar = await api('/barang').catch(() => null);
       if (segar) { segar.forEach((x) => peta.set(String(x.id_barang), x)); tampilSisa(); }
     } finally {
@@ -279,38 +205,69 @@ async function formKeluar(app, q) {
 }
 
 // ---------------------------------------------------------------------
-// Riwayat stok masuk & keluar
+// Riwayat stok masuk & keluar per tanggal
 // ---------------------------------------------------------------------
-async function riwayat(app, q) {
-  const barang = await api('/barang?semua=1');
+async function riwayat(app) {
+  const hariIni = sekarangWIB().tanggal;
+  let kata = '';
+  let rows = [];
   app.innerHTML = `
-    <h1 class="page-title">Stok</h1>
-    ${tabs('riwayat')}
-    <div class="field">
-      <select class="input" id="fb"><option value="">Semua barang</option>${barang.map((b) => `<option value="${b.id_barang}" ${String(q.barang) === String(b.id_barang) ? 'selected' : ''}>${esc(b.nama_barang)}</option>`).join('')}</select>
+    <a href="#/stok" class="btn-kembali">${ikon.kiri} Kembali ke Stok</a>
+    <h1 class="page-title riwayat-judul">Riwayat Stok</h1>
+    <div class="bantuan-card riwayat-filter">
+      ${kolomCari('cari', 'Cari nama menu…')}
+      <div class="riwayat-tgl">
+        <input class="input num" type="date" id="tgl" value="${hariIni}" max="${hariIni}" aria-label="Tanggal riwayat">
+        <button type="button" class="btn-ikon" id="segarkan" aria-label="Muat ulang riwayat">${ikonSegarkan}</button>
+      </div>
     </div>
-    <ul class="list" id="list"><li class="empty">Memuat…</li></ul>`;
+    <div class="riwayat-list" id="list"><p class="empty">Memuat…</p></div>`;
   const listEl = app.querySelector('#list');
-  const fb = app.querySelector('#fb');
+  const tgl = app.querySelector('#tgl');
 
-  async function muat() {
-    const rows = await api(`/stok/riwayat?limit=60${fb.value ? `&id_barang=${fb.value}` : ''}`);
-    if (!rows.length) { listEl.innerHTML = '<li class="empty">Belum ada riwayat.</li>'; return; }
-    listEl.innerHTML = rows.map((r) => {
+  function keterangan(r) {
+    if (r.jenis === 'masuk') return r.catatan || '-';
+    if (r.alasan === 'terjual') return r.id_transaksi ? 'Terjual lewat Kasir' : 'Terjual';
+    return kapital(r.alasan) + (r.catatan ? ` · ${r.catatan}` : '');
+  }
+  function waktu(w) {
+    const t = infoTanggal(w.slice(0, 10));
+    return `${t.tgl} ${t.bulan} ${t.tahun}${w.length > 10 ? `, ${w.slice(11, 16)} WIB` : ''}`;
+  }
+
+  function tampil() {
+    const k = kata.toLowerCase();
+    const pilih = rows.filter((r) => r.nama_barang.toLowerCase().includes(k));
+    if (!pilih.length) {
+      listEl.innerHTML = `<p class="empty">${kata ? `Tidak ada riwayat untuk “${esc(kata)}” pada tanggal ini.` : 'Belum ada riwayat stok pada tanggal ini.'}</p>`;
+      return;
+    }
+    listEl.innerHTML = pilih.map((r) => {
       const masuk = r.jenis === 'masuk';
-      const t = infoTanggal(r.waktu.slice(0, 10));
-      const jam = masuk ? '' : ' ' + r.waktu.slice(11, 16).replace(':', '.');
-      const ket = masuk ? (r.keterangan || 'Stok masuk') : (r.id_transaksi ? `Terjual · transaksi #${r.id_transaksi}` : r.keterangan[0].toUpperCase() + r.keterangan.slice(1));
       return `
-        <li><div class="row">
-          <div class="grow">
-            <div class="ellipsis"><b>${esc(r.nama_barang)}</b></div>
-            <div class="small muted ellipsis">${esc(ket)} · ${t.tgl} ${t.bulan}${jam} · ${esc(r.pencatat)}</div>
+        <article class="bantuan-card riwayat-item">
+          <div class="menu-item-baris">
+            <div><b>${esc(r.nama_barang)}</b><span class="riwayat-waktu num">${waktu(r.waktu)}</span></div>
+            <b class="riwayat-jml num ${masuk ? 'masuk' : 'keluar'}" aria-label="${masuk ? 'Masuk' : 'Keluar'} ${angka(r.jumlah)} ${esc(r.satuan)}">${masuk ? '+' : '-'}${angka(r.jumlah)}</b>
           </div>
-          <div class="num" style="font-weight:800;color:${masuk ? 'var(--ok)' : 'var(--danger)'}">${masuk ? '+' : '−'}${angka(r.jumlah)}</div>
-        </div></li>`;
+          <p class="riwayat-ket">${esc(keterangan(r))}</p>
+        </article>`;
     }).join('');
   }
-  fb.addEventListener('change', muat);
+
+  async function muat() {
+    if (!tgl.value) return;
+    listEl.innerHTML = '<p class="empty">Memuat…</p>';
+    try {
+      rows = await api(`/stok/riwayat?tanggal=${tgl.value}&limit=500`);
+      tampil();
+    } catch (err) {
+      listEl.innerHTML = `<div class="notice err">${esc(err.message)}</div>`;
+    }
+  }
+
+  pasangCari(app, 'cari', (v) => { kata = v; tampil(); });
+  tgl.addEventListener('change', muat);
+  app.querySelector('#segarkan').addEventListener('click', muat);
   await muat();
 }

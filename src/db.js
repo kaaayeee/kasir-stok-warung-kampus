@@ -22,6 +22,14 @@ function migrasi(db) {
   const ada = (tabel, kolom) => db.prepare(`PRAGMA table_info(${tabel})`).all().some((r) => r.name === kolom);
   if (!ada('TRANSAKSI', 'nama_pelanggan')) db.exec('ALTER TABLE TRANSAKSI ADD COLUMN nama_pelanggan TEXT');
   if (!ada('TRANSAKSI', 'catatan')) db.exec('ALTER TABLE TRANSAKSI ADD COLUMN catatan TEXT');
+  if (!ada('STOK_KELUAR', 'catatan')) db.exec('ALTER TABLE STOK_KELUAR ADD COLUMN catatan TEXT');
+  // Transaksi lama (sebelum ada status) dianggap sudah selesai.
+  if (!ada('TRANSAKSI', 'status')) {
+    db.exec("ALTER TABLE TRANSAKSI ADD COLUMN status TEXT NOT NULL DEFAULT 'selesai' CHECK (status IN ('belum_selesai', 'selesai', 'dibatalkan'))");
+  }
+  if (!ada('TRANSAKSI', 'uang_diterima')) {
+    db.exec('ALTER TABLE TRANSAKSI ADD COLUMN uang_diterima INTEGER CHECK (uang_diterima IS NULL OR uang_diterima >= 0)');
+  }
 }
 
 /** true bila database belum punya data awal */

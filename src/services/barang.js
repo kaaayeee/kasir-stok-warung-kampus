@@ -1,6 +1,6 @@
 // Logika data BARANG (daftar sisa stok + kelola barang).
 const v = require('../lib/validasi');
-const { hariIni } = require('../lib/waktu');
+const { sekarang } = require('../lib/waktu');
 
 function statusStok(b) {
   if (b.stok_saat_ini <= 0) return 'habis';
@@ -65,7 +65,7 @@ module.exports = function layananBarang(db) {
         .run(nama, satuan, harga, awal, min);
       if (awal > 0) {
         db.prepare('INSERT INTO STOK_MASUK (id_barang, id_pengguna, jumlah, tanggal_masuk, catatan) VALUES (?, ?, ?, ?, ?)')
-          .run(lastInsertRowid, idPengguna, awal, hariIni(), 'Stok awal');
+          .run(lastInsertRowid, idPengguna, awal, sekarang(), 'Stok awal');
       }
       return lastInsertRowid;
     })();

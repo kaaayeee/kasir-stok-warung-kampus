@@ -61,9 +61,9 @@ describe('Setup: database sesuai ERD revisi', () => {
     assert.deepEqual(kolom('PENGGUNA'), ['id_pengguna', 'nama', 'peran']);
     assert.deepEqual(kolom('BARANG'), ['id_barang', 'nama_barang', 'satuan', 'harga_jual', 'stok_saat_ini', 'stok_minimum', 'aktif']);
     assert.deepEqual(kolom('STOK_MASUK'), ['id_masuk', 'id_barang', 'id_pengguna', 'jumlah', 'tanggal_masuk', 'catatan']);
-    assert.deepEqual(kolom('STOK_KELUAR'), ['id_keluar', 'id_barang', 'id_pengguna', 'id_transaksi', 'jumlah', 'alasan', 'waktu_keluar']);
+    assert.deepEqual(kolom('STOK_KELUAR'), ['id_keluar', 'id_barang', 'id_pengguna', 'id_transaksi', 'jumlah', 'alasan', 'waktu_keluar', 'catatan']);
     assert.deepEqual(kolom('JADWAL_BUKA_TUTUP'), ['id_jadwal', 'id_pengguna', 'tanggal', 'jam_buka', 'jam_tutup', 'buka', 'catatan']);
-    assert.deepEqual(kolom('TRANSAKSI'), ['id_transaksi', 'id_pengguna', 'waktu_transaksi', 'metode_bayar', 'total', 'nama_pelanggan', 'catatan']);
+    assert.deepEqual(kolom('TRANSAKSI'), ['id_transaksi', 'id_pengguna', 'waktu_transaksi', 'metode_bayar', 'total', 'nama_pelanggan', 'catatan', 'status', 'uang_diterima']);
     assert.deepEqual(kolom('DETAIL_TRANSAKSI'), ['id_detail', 'id_transaksi', 'id_barang', 'jumlah', 'harga_satuan', 'subtotal']);
   });
 
@@ -116,11 +116,34 @@ describe('Task 1 (EP-01 US-02): stok masuk, stok keluar, sisa stok', () => {
     assert.equal(c.barang('Es Jeruk').stok_saat_ini, b.stok_saat_ini);
   });
 
-  test('stok masuk: barang wajib dipilih dan tanggal tidak boleh kosong', async () => {
+  test('stok masuk: barang wajib dipilih; tanggal kosong → otomatis tanggal & jam sekarang; tanggal salah/masa depan ditolak', async () => {
     let r = await c.call('POST', '/stok/masuk', { jumlah: 1, tanggal_masuk: hariIni() });
     assert.equal(r.status, 400); assert.equal(r.body.field, 'id_barang');
-    r = await c.call('POST', '/stok/masuk', { id_barang: 1, jumlah: 1, tanggal_masuk: '' });
+    r = await c.call('POST', '/stok/masuk', { id_barang: 1, jumlah: 1 });
+    assert.equal(r.status, 201);
+    const row = c.db.prepare('SELECT tanggal_masuk FROM STOK_MASUK WHERE id_masuk = ?').get(r.body.id_masuk);
+    assert.match(row.tanggal_masuk, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    assert.equal(row.tanggal_masuk.slice(0, 10), hariIni());
+    r = await c.call('POST', '/stok/masuk', { id_barang: 1, jumlah: 1, tanggal_masuk: '2026-13-40' });
     assert.equal(r.status, 400); assert.equal(r.body.field, 'tanggal_masuk');
+    r = await c.call('POST', '/stok/masuk', { id_barang: 1, jumlah: 1, tanggal_masuk: tambahHari(hariIni(), 1) });
+    assert.equal(r.status, 400); assert.equal(r.body.field, 'tanggal_masuk');
+  });
+
+  test('stok keluar menyimpan catatan (opsional); riwayat bisa disaring per tanggal', async () => {
+    const b = c.barang('Mie Goreng Telur');
+    const r = await c.call('POST', '/stok/keluar', { id_barang: b.id_barang, jumlah: 1, alasan: 'rusak', catatan: ' Jatuh ' });
+    assert.equal(r.status, 201);
+    const row = c.db.prepare('SELECT catatan FROM STOK_KELUAR ORDER BY id_keluar DESC LIMIT 1').get();
+    assert.equal(row.catatan, 'Jatuh');
+    const hari = (await c.call('GET', '/stok/riwayat?tanggal=' + hariIni() + '&limit=500')).body;
+    assert.ok(hari.length > 0 && hari.every((x) => x.waktu.slice(0, 10) === hariIni()));
+    const atas = hari.find((x) => x.jenis === 'keluar');
+    assert.equal(atas.catatan, 'Jatuh');
+    assert.equal(atas.alasan, 'rusak');
+    const kemarin = (await c.call('GET', '/stok/riwayat?tanggal=' + tambahHari(hariIni(), -1))).body;
+    assert.deepEqual(kemarin, []);
+    assert.equal((await c.call('GET', '/stok/riwayat?tanggal=salah')).status, 400);
   });
 
   test('stok keluar tersimpan dengan alasan & waktu, stok berkurang', async () => {
@@ -487,8 +510,92 @@ describe('Kasir: nama pelanggan, catatan, nomor pesanan harian', () => {
     lama.close();
     const db = bukaDatabase(file);
     const kolom = db.prepare('PRAGMA table_info(TRANSAKSI)').all().map((r) => r.name);
-    assert.ok(kolom.includes('nama_pelanggan') && kolom.includes('catatan'));
+    assert.ok(['nama_pelanggan', 'catatan', 'status', 'uang_diterima'].every((k) => kolom.includes(k)));
     assert.equal(db.prepare('SELECT total FROM TRANSAKSI').get().total, 5000, 'data lama tetap ada');
+    assert.equal(db.prepare('SELECT status FROM TRANSAKSI').get().status, 'selesai', 'transaksi lama dianggap selesai');
     db.close();
+  });
+});
+
+describe('Transaksi: status pesanan, uang diterima, pembatalan, rekap, menu terlaris', () => {
+  const c = siapkan();
+  const beli = (body) => c.call('POST', '/transaksi', body);
+  const stokSama = () => {
+    const rows = c.db.prepare(`SELECT b.stok_saat_ini,
+        COALESCE((SELECT SUM(jumlah) FROM STOK_MASUK m WHERE m.id_barang = b.id_barang), 0)
+      - COALESCE((SELECT SUM(jumlah) FROM STOK_KELUAR k WHERE k.id_barang = b.id_barang), 0) AS hitung
+      FROM BARANG b`).all();
+    return rows.every((r) => r.stok_saat_ini === r.hitung);
+  };
+
+  test('transaksi baru berstatus belum_selesai; uang diterima tunai tersimpan, QRIS diabaikan', async () => {
+    const id = c.barang('Nasi Goreng').id_barang; // Rp12.000
+    const r = await beli({ metode_bayar: 'tunai', uang_diterima: 20000, items: [{ id_barang: id, jumlah: 1 }] });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.status, 'belum_selesai');
+    assert.equal(r.body.uang_diterima, 20000);
+    const q = await beli({ metode_bayar: 'qris', uang_diterima: 50000, items: [{ id_barang: id, jumlah: 1 }] });
+    assert.equal(q.body.uang_diterima, null);
+    const tanpa = await beli({ metode_bayar: 'tunai', uang_diterima: '', items: [{ id_barang: id, jumlah: 1 }] });
+    assert.equal(tanpa.body.uang_diterima, null);
+  });
+
+  test('uang diterima kurang dari total atau bukan angka ditolak, stok tidak berubah', async () => {
+    const b = c.barang('Nasi Goreng');
+    for (const uang of [5000, 'abc', -1]) {
+      const r = await beli({ metode_bayar: 'tunai', uang_diterima: uang, items: [{ id_barang: b.id_barang, jumlah: 1 }] });
+      assert.equal(r.status, 400, `uang=${uang}`);
+      assert.equal(r.body.field, 'uang_diterima');
+    }
+    assert.equal(c.barang('Nasi Goreng').stok_saat_ini, b.stok_saat_ini);
+  });
+
+  test('tandai selesai; status akhir tidak bisa diubah lagi', async () => {
+    const r = await beli({ metode_bayar: 'qris', items: [{ id_barang: c.barang('Kopi Hitam').id_barang, jumlah: 1 }] });
+    const s = await c.call('PATCH', `/transaksi/${r.body.id_transaksi}/status`, { status: 'selesai' });
+    assert.equal(s.status, 200);
+    assert.equal(s.body.status, 'selesai');
+    const lagi = await c.call('PATCH', `/transaksi/${r.body.id_transaksi}/status`, { status: 'dibatalkan' });
+    assert.equal(lagi.status, 409);
+  });
+
+  test('batalkan: stok kembali (tercatat di riwayat), pemasukan tidak menghitungnya', async () => {
+    const b = c.barang('Es Jeruk');
+    const r = await beli({ metode_bayar: 'tunai', items: [{ id_barang: b.id_barang, jumlah: 3 }] });
+    assert.equal(c.barang('Es Jeruk').stok_saat_ini, b.stok_saat_ini - 3);
+    const sebelum = (await c.call('GET', '/transaksi')).body.ringkasan;
+    const x = await c.call('PATCH', `/transaksi/${r.body.id_transaksi}/status`, { status: 'dibatalkan' });
+    assert.equal(x.status, 200);
+    assert.equal(x.body.status, 'dibatalkan');
+    assert.equal(c.barang('Es Jeruk').stok_saat_ini, b.stok_saat_ini, 'stok kembali seperti semula');
+    const masuk = c.db.prepare('SELECT * FROM STOK_MASUK ORDER BY id_masuk DESC LIMIT 1').get();
+    assert.equal(masuk.jumlah, 3);
+    assert.match(masuk.catatan, /^Pembatalan pesanan WU-\d{6}-\d{3}$/);
+    assert.ok(stokSama(), 'stok_saat_ini = masuk − keluar');
+    const sesudah = (await c.call('GET', '/transaksi')).body.ringkasan;
+    assert.equal(sesudah.total, sebelum.total - r.body.total);
+    assert.equal(sesudah.dibatalkan, sebelum.dibatalkan + 1);
+    assert.equal(sesudah.jumlah_transaksi, sebelum.jumlah_transaksi, 'tetap terdaftar');
+  });
+
+  test('ubah status: status salah 400, id tidak ada 404, tanpa pengguna 401', async () => {
+    assert.equal((await c.call('PATCH', '/transaksi/1/status', { status: 'hilang' })).status, 400);
+    assert.equal((await c.call('PATCH', '/transaksi/99999/status', { status: 'selesai' })).status, 404);
+    assert.equal((await c.call('PATCH', '/transaksi/1/status', { status: 'selesai' }, null)).status, 401);
+  });
+
+  test('menu terlaris: hanya transaksi selesai, terbanyak di atas', async () => {
+    const g = c.barang('Gorengan').id_barang, k = c.barang('Kerupuk').id_barang;
+    const a = await beli({ metode_bayar: 'tunai', items: [{ id_barang: g, jumlah: 5 }, { id_barang: k, jumlah: 2 }] });
+    const bel = await beli({ metode_bayar: 'tunai', items: [{ id_barang: k, jumlah: 9 }] }); // belum selesai
+    await c.call('PATCH', `/transaksi/${a.body.id_transaksi}/status`, { status: 'selesai' });
+    const { menu } = (await c.call('GET', '/transaksi/terlaris')).body;
+    const gor = menu.find((m) => m.id_barang === g), ker = menu.find((m) => m.id_barang === k);
+    assert.equal(gor.jumlah, 5);
+    assert.equal(ker.jumlah, 2, 'transaksi belum selesai tidak dihitung');
+    assert.ok(menu.indexOf(gor) < menu.indexOf(ker));
+    assert.ok(bel.body.id_transaksi);
+    assert.deepEqual((await c.call('GET', '/transaksi/terlaris?tanggal=2020-01-01')).body.menu, []);
+    assert.equal((await c.call('GET', '/transaksi/terlaris?tanggal=salah')).status, 400);
   });
 });

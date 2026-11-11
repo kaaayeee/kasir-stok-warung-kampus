@@ -8,7 +8,7 @@ Prototype Sprint 2 (yang tertinggal), dikerjakan urut sesuai arahan PM:
 | Task 2 | EP-01 US-03 | Jadwal buka tutup per hari + validasi jam | menu **Jadwal** |
 | Task 3 | EP-02 US-05 | Pesanan, QRIS/tunai, stok berkurang otomatis, log penjualan, < 30 detik | menu **Kasir** + Lainnya › Log penjualan |
 
-Database mengikuti **ERD revisi EP-01 US-01 (disetujui BA 26 Okt 2026)**: 7 tabel. Satu-satunya tambahan: kolom opsional `nama_pelanggan` dan `catatan` di `TRANSAKSI` (dari desain halaman Kasir, Nov 2026 — **perlu dikabarkan ke BA**). Database lama otomatis ditambah kolomnya saat aplikasi dijalankan, data lama tetap aman. Lihat `src/schema.sql`.
+Database mengikuti **ERD revisi EP-01 US-01 (disetujui BA 26 Okt 2026)**: 7 tabel. Tambahan dari desain (Nov 2026 — **perlu dikabarkan ke BA**): kolom opsional `nama_pelanggan` dan `catatan` di `TRANSAKSI` (halaman Kasir), dan `catatan` di `STOK_KELUAR` (halaman Stok), serta `status` (belum_selesai / selesai / dibatalkan) dan `uang_diterima` di `TRANSAKSI` (halaman Transaksi). Pesanan baru berstatus Belum Selesai; membatalkan pesanan mengembalikan stok (tercatat di riwayat stok) dan tidak dihitung sebagai pemasukan. Transaksi lama dianggap Selesai. `STOK_MASUK.tanggal_masuk` kini terisi otomatis tanggal + jam (form Stok Masuk tidak punya isian tanggal). Database lama otomatis ditambah kolomnya saat aplikasi dijalankan, data lama tetap aman. Lihat `src/schema.sql`.
 
 ## Cara menjalankan
 
@@ -35,7 +35,7 @@ Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi d
 |---|---|
 | `npm run dev` | Jalan + otomatis restart saat kode diubah |
 | `npm run db:reset` | Hapus database dan isi ulang data awal |
-| `npm test` | Uji mandiri otomatis (46 uji, pakai database sementara, data asli aman) |
+| `npm test` | Uji mandiri otomatis (53 uji, pakai database sementara, data asli aman) |
 
 ## Struktur
 
@@ -71,7 +71,7 @@ docs/                 penjelasan, hasil uji, screenshot
 
 1. **Daftar menu** diambil dari desain Kasir (13 menu). Stok awal mengikuti desain, stok minimum masih perkiraan (5). Ubah di `src/seed.js` (`BARANG_AWAL`) lalu `npm run db:reset`, atau lewat Lainnya › Kelola barang. Uji otomatis memakai data ujinya sendiri, jadi tidak terpengaruh.
 2. **QRIS hanya dicatat sebagai metode bayar**, tidak ada integrasi pembayaran.
-3. **Kembalian tunai** hanya dihitung di layar, tidak disimpan (tidak ada kolomnya di ERD).
+3. **Uang diterima** (tunai) disimpan bila diisi, jadi kembalian tampil di Detail Transaksi. **Menu terlaris** hanya menghitung pesanan berstatus Selesai, sedangkan **pemasukan** menghitung semua pesanan yang tidak dibatalkan.
 4. **Warung tutup lewat tengah malam** belum didukung (aturan jam tutup > jam buka).
 5. **Login** hanya untuk admin. Email & kata sandi disimpan di `.env` (ERD belum punya kolomnya). Server masih memercayai header `X-Pengguna-Id` tanpa token sesi, dan "Lupa kata sandi" belum mengirim email. Cukup untuk prototype, perlu diputuskan untuk versi rilis.
 6. **Teknologi**: Node.js + Express + SQLite dipilih karena paling ringan dijalankan semua anggota. Kalau tim pakai stack lain, logika & aturan di `src/services/` bisa dipindah apa adanya.
