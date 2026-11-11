@@ -2,7 +2,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { akunAdmin } = require('./config');
+const { akunAdmin, kontakPengembang } = require('./config');
 const { ValidasiError } = require('./lib/validasi');
 const { hariIni } = require('./lib/waktu');
 const layananBarang = require('./services/barang');
@@ -45,7 +45,7 @@ function buatApp(db) {
 
   const api = express.Router();
 
-  api.get('/info', (_req, res) => res.json({ hari_ini: hariIni(), versi: '0.2.0-sprint2' }));
+  api.get('/info', (_req, res) => res.json({ hari_ini: hariIni(), versi: '0.2.0-sprint2', kontak: kontakPengembang }));
   api.get('/pengguna', (_req, res) => res.json(db.prepare('SELECT * FROM PENGGUNA ORDER BY id_pengguna').all()));
 
   // ---------- MASUK (login admin) ----------

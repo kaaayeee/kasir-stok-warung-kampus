@@ -10,7 +10,18 @@ function bukaDatabase(file) {
   db.pragma('foreign_keys = ON');
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+  migrasi(db);
   return db;
+}
+
+/**
+ * Tambah kolom baru ke database yang dibuat sebelum kolom itu ada
+ * (CREATE TABLE IF NOT EXISTS tidak mengubah tabel lama). Data lama aman.
+ */
+function migrasi(db) {
+  const ada = (tabel, kolom) => db.prepare(`PRAGMA table_info(${tabel})`).all().some((r) => r.name === kolom);
+  if (!ada('TRANSAKSI', 'nama_pelanggan')) db.exec('ALTER TABLE TRANSAKSI ADD COLUMN nama_pelanggan TEXT');
+  if (!ada('TRANSAKSI', 'catatan')) db.exec('ALTER TABLE TRANSAKSI ADD COLUMN catatan TEXT');
 }
 
 /** true bila database belum punya data awal */

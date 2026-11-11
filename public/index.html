@@ -11,31 +11,22 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Warung Kampus<small>Kasir &amp; Stok</small></div>
+    <a class="brand" href="#/beranda" aria-label="Beranda Dapoer Bu Mimin">
+      <span class="logo-mark" aria-hidden="true"></span>
+      <span><b>Dapoer Bu Mimin</b><small>Operasional Warung</small></span>
+    </a>
     <div class="spacer"></div>
-    <span id="status-warung" class="status-chip"><span class="dot"></span><span>…</span></span>
-    <button id="btn-user" class="avatar" aria-label="Akun &amp; keluar">?</button>
+    <button id="btn-user" class="avatar" aria-label="Akun &amp; menu lainnya">?</button>
   </header>
 
   <main id="app" aria-live="polite"></main>
 
+  <!-- Ikon diisi dari js/util.js (ikonMenu) supaya sama dengan ikon di Beranda -->
   <nav class="bottomnav" aria-label="Menu utama">
-    <a href="#/kasir" data-nav="kasir">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>
-      Kasir
-    </a>
-    <a href="#/stok" data-nav="stok">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
-      Stok
-    </a>
-    <a href="#/jadwal" data-nav="jadwal">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      Jadwal
-    </a>
-    <a href="#/lainnya" data-nav="lainnya">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      Lainnya
-    </a>
+    <a href="#/kasir" data-nav="kasir"><span data-ikon="kasir"></span>Kasir</a>
+    <a href="#/stok" data-nav="stok"><span data-ikon="stok"></span>Stok</a>
+    <a href="#/jadwal" data-nav="jadwal"><span data-ikon="jadwal"></span>Jadwal</a>
+    <a href="#/transaksi" data-nav="transaksi"><span data-ikon="transaksi"></span>Transaksi</a>
   </nav>
 
   <div class="toast-wrap" id="toasts"></div>

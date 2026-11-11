@@ -9,7 +9,7 @@ const METODE = ['qris', 'tunai'];
 
 module.exports = function layananTransaksi(db, barang, stok) {
   const insTrx = db.prepare(
-    'INSERT INTO TRANSAKSI (id_pengguna, waktu_transaksi, metode_bayar, total) VALUES (?, ?, ?, ?)'
+    'INSERT INTO TRANSAKSI (id_pengguna, waktu_transaksi, metode_bayar, total, nama_pelanggan, catatan) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const insDetail = db.prepare(
     'INSERT INTO DETAIL_TRANSAKSI (id_transaksi, id_barang, jumlah, harga_satuan, subtotal) VALUES (?, ?, ?, ?, ?)'
@@ -37,6 +37,8 @@ module.exports = function layananTransaksi(db, barang, stok) {
       throw new v.ValidasiError('Pilih metode bayar: QRIS atau tunai.', 'metode_bayar');
     }
     const items = rapikanItem(input.items);
+    const namaPelanggan = v.teksOpsional(input.nama_pelanggan, 60);
+    const catatan = v.teksOpsional(input.catatan, 200);
 
     const id = db.transaction(() => {
       const waktu = sekarang();
@@ -58,7 +60,7 @@ module.exports = function layananTransaksi(db, barang, stok) {
       });
       const total = baris.reduce((s, x) => s + x.subtotal, 0);
 
-      const idTrx = insTrx.run(idPengguna, waktu, metode, total).lastInsertRowid;
+      const idTrx = insTrx.run(idPengguna, waktu, metode, total, namaPelanggan, catatan).lastInsertRowid;
       for (const x of baris) {
         insDetail.run(idTrx, x.id_barang, x.jumlah, x.harga_satuan, x.subtotal);
         stok.kurangiDalamTransaksi(
@@ -76,7 +78,13 @@ module.exports = function layananTransaksi(db, barang, stok) {
   function ambil(id) {
     const t = db
       .prepare(
-        `SELECT t.*, p.nama AS pencatat FROM TRANSAKSI t JOIN PENGGUNA p USING (id_pengguna) WHERE id_transaksi = ?`
+        // nomor_harian: urutan transaksi pada tanggal yang sama (1, 2, 3, ...),
+        // dipakai untuk kode pesanan WU-YYMMDD-NNN. Dihitung, tidak disimpan.
+        `SELECT t.*, p.nama AS pencatat,
+                (SELECT COUNT(*) FROM TRANSAKSI x
+                  WHERE substr(x.waktu_transaksi, 1, 10) = substr(t.waktu_transaksi, 1, 10)
+                    AND x.id_transaksi <= t.id_transaksi) AS nomor_harian
+           FROM TRANSAKSI t JOIN PENGGUNA p USING (id_pengguna) WHERE id_transaksi = ?`
       )
       .get(Number(id));
     if (!t) return null;

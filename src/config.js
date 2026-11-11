@@ -20,4 +20,10 @@ module.exports = {
     email: (process.env.ADMIN_EMAIL || 'dapoerbumimin@gmail.com').trim().toLowerCase(),
     kataSandi: process.env.ADMIN_KATA_SANDI || 'dapoeradmin123',
   },
+  // Kontak tim pengembang untuk tombol "Hubungi Tim Pengembang" di Pusat Bantuan.
+  // Kosongkan bila belum ada; tombol akan memberi tahu bahwa kontak belum diatur.
+  kontakPengembang: {
+    email: (process.env.KONTAK_EMAIL || '').trim(),
+    whatsapp: (process.env.KONTAK_WA || '').replace(/[^\d]/g, ''),
+  },
 };

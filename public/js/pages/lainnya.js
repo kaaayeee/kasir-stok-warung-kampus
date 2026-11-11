@@ -1,7 +1,8 @@
 // Menu Lainnya: log penjualan, kelola barang, catatan waktu transaksi, keluar.
-import { api, esc, rupiah, angka, toast, sesi, sekarangWIB, tanggalPanjang, setErr, clearErr, badgeStatus } from '../util.js';
+import { api, esc, rupiah, angka, toast, sesi, sekarangWIB, tanggalPanjang, setErr, clearErr, badgeStatus, inisial, kodePesanan } from '../util.js';
 
 export async function render(app, sub, q) {
+  if (sub === 'transaksi') return penjualan(app, q, true); // menu utama "Transaksi"
   if (sub === 'penjualan') return penjualan(app, q);
   if (sub === 'barang') return kelolaBarang(app, q);
   if (sub === 'waktu') return catatanWaktu(app);
@@ -17,13 +18,13 @@ function menu(app) {
   app.innerHTML = `
     <h1 class="page-title">Lainnya</h1>
     <div class="card row">
-      <span class="avatar">${esc(p.nama.replace(/^Bu\s+/i, '')[0])}</span>
+      <span class="avatar">${esc(inisial(p.nama))}</span>
       <div class="grow"><b>${esc(p.nama)}</b><div class="small muted">${p.peran === 'admin' ? 'Admin' : 'Pegawai'} · tercatat sebagai pencatat</div></div>
       <button class="btn sm" id="keluar">Keluar</button>
     </div>
     <h2>Menu</h2>
     <ul class="list link-list">
-      <li><a href="#/lainnya/penjualan"><span><b>Log penjualan</b><div class="small muted">Transaksi per hari, total QRIS &amp; tunai</div></span></a></li>
+      <li><a href="#/transaksi"><span><b>Riwayat transaksi</b><div class="small muted">Transaksi per hari, total QRIS &amp; tunai</div></span></a></li>
       <li><a href="#/lainnya/barang"><span><b>Kelola barang</b><div class="small muted">Tambah barang, ubah harga &amp; stok minimum</div></span></a></li>
       <li><a href="#/lainnya/waktu"><span><b>Catatan waktu transaksi</b><div class="small muted">Hasil ukur &lt; 30 detik di HP ini</div></span></a></li>
     </ul>
@@ -36,10 +37,10 @@ function menu(app) {
 // ---------------------------------------------------------------------
 // Log penjualan (bukti transaksi tersimpan; juga dasar rekap EP-03)
 // ---------------------------------------------------------------------
-async function penjualan(app, q) {
+async function penjualan(app, q, menuUtama = false) {
   const tgl = q.tanggal || sekarangWIB().tanggal;
   app.innerHTML = `
-    ${kembali('Log penjualan')}
+    ${menuUtama ? '<h1 class="page-title">Riwayat Transaksi</h1>' : kembali('Log penjualan')}
     <div class="field"><input class="input" type="date" id="tgl" value="${tgl}"></div>
     <div id="isi"><p class="empty">Memuat…</p></div>`;
   const isi = app.querySelector('#isi');
@@ -59,13 +60,15 @@ async function penjualan(app, q) {
         <li><details class="trx">
           <summary class="row">
             <div class="grow">
-              <b>#${t.id_transaksi}</b> <span class="badge netral">${t.metode_bayar === 'qris' ? 'QRIS' : 'Tunai'}</span>
+              <b class="num">#${kodePesanan(t.waktu_transaksi, t.nomor_harian)}</b> <span class="badge netral">${t.metode_bayar === 'qris' ? 'QRIS' : 'Tunai'}</span>
+              ${t.nama_pelanggan ? `<div class="trx-pelanggan">${esc(t.nama_pelanggan)}</div>` : ''}
               <div class="small muted">${t.waktu_transaksi.slice(11, 16).replace(':', '.')} · ${t.items.length} jenis item · ${esc(t.pencatat)}</div>
             </div>
             <b class="num">${rupiah(t.total)}</b>
           </summary>
           <div class="trx-items">
             ${t.items.map((i) => `<div><span>${esc(i.nama_barang)} × ${i.jumlah}</span><span class="num">${rupiah(i.subtotal)}</span></div>`).join('')}
+            ${t.catatan ? `<p class="trx-catatan">Catatan: ${esc(t.catatan)}</p>` : ''}
           </div>
         </details></li>`).join('')}</ul>` : '<p class="empty">Belum ada transaksi di tanggal ini.</p>'}`;
   }
@@ -187,7 +190,7 @@ function catatanWaktu(app) {
         <div class="stat"><span>Rata-rata</span><b class="num">${(arr.reduce((s, x) => s + x.detik, 0) / arr.length).toFixed(1)} dtk</b></div>
       </div>
       <ul class="list">${arr.map((x) => `
-        <li class="row"><div class="grow"><b>#${x.id_transaksi}</b> · ${x.item} jenis item · ${String(x.metode).toUpperCase()}<div class="small muted">${esc(x.waktu)}</div></div>
+        <li class="row"><div class="grow"><b class="num">#${esc(x.kode || x.id_transaksi)}</b> · ${x.item} jenis item · ${String(x.metode).toUpperCase()}<div class="small muted">${esc(x.waktu)}</div></div>
         <span class="badge ${x.detik < 30 ? 'aman' : 'habis'} num">${x.detik} dtk</span></li>`).join('')}</ul>
       <button class="btn block" id="hapus" style="margin-top:12px">Hapus catatan</button>`
     : '<p class="empty">Belum ada transaksi yang diukur di HP ini.</p>'}`;

@@ -1,9 +1,9 @@
 // Data awal: 2 pengguna, daftar barang contoh, dan jadwal 7 hari ke depan.
 //
-// PENTING: daftar barang di bawah ini CONTOH. Daftar asli (nama, satuan,
-// harga, stok awal, stok minimum) belum ada di dokumen dan perlu diambil
-// dari catatan wawancara 15/09/2026 atau ditanyakan ke Bu Mimin.
-// Ganti isi BARANG_AWAL lalu jalankan `npm run db:reset`.
+// Daftar menu diambil dari desain halaman Kasir (Dapoer Bu Mimin).
+// Stok awal mengikuti angka di desain; stok minimum belum ada di desain
+// (sementara 5, tempe/tahu 10) — sesuaikan dengan Bu Mimin bila perlu.
+// Setelah mengubah BARANG_AWAL, jalankan `npm run db:reset`.
 
 const { hariIni, tambahHari } = require('./lib/waktu');
 
@@ -14,16 +14,19 @@ const PENGGUNA_AWAL = [
 
 // [nama, satuan, harga_jual, stok_awal, stok_minimum]
 const BARANG_AWAL = [
-  ['Nasi Goreng', 'porsi', 12000, 20, 5],
-  ['Mie Goreng Telur', 'porsi', 10000, 15, 5],
-  ['Nasi Ayam Geprek', 'porsi', 13000, 4, 5], // sengaja menipis
-  ['Es Teh Manis', 'gelas', 4000, 40, 10],
-  ['Es Jeruk', 'gelas', 5000, 25, 10],
-  ['Kopi Hitam', 'gelas', 4000, 30, 5],
-  ['Air Mineral 600ml', 'botol', 4000, 24, 6],
-  ['Teh Botol', 'botol', 5000, 0, 6], // sengaja habis
-  ['Gorengan', 'pcs', 1000, 50, 10],
-  ['Kerupuk', 'bungkus', 1000, 30, 5],
+  ['Nasi Campur', 'porsi', 15000, 14, 5],
+  ['Nasi Lalapan / Penyetan', 'porsi', 15000, 12, 5],
+  ['Nasi Rawon', 'porsi', 16000, 8, 5],
+  ['Nasi Bakar', 'porsi', 11000, 18, 5],
+  ['Nasi Putih', 'porsi', 5000, 18, 5],
+  ['Ayam Bakar', 'potong', 10000, 9, 5],
+  ['Ayam Laos', 'potong', 10000, 11, 5],
+  ['Ayam Krispi', 'potong', 10000, 15, 5],
+  ['Udang', 'porsi', 10000, 5, 5],
+  ['Jamur Krispi', 'porsi', 8000, 7, 5],
+  ['Telur Dadar', 'butir', 5000, 16, 5],
+  ['Tempe / Tahu', 'potong', 2000, 28, 10],
+  ['Sayur dan semacamnya', 'porsi', 3000, 10, 5],
 ];
 
 // Jadwal awal: Senin-Jumat 07.00-16.00, Sabtu 08.00-13.00, Minggu libur.
@@ -34,7 +37,8 @@ function jadwalUntuk(tanggal) {
   return { buka: 1, jam_buka: '07:00', jam_tutup: '16:00', catatan: null };
 }
 
-function isiDataAwal(db) {
+/** Isi data awal. `barang` bisa diganti (dipakai uji otomatis dengan data ujinya sendiri). */
+function isiDataAwal(db, { barang = BARANG_AWAL } = {}) {
   const hari = hariIni();
   const run = db.transaction(() => {
     const insUser = db.prepare('INSERT INTO PENGGUNA (nama, peran) VALUES (?, ?)');
@@ -47,7 +51,7 @@ function isiDataAwal(db) {
     const insMasuk = db.prepare(
       'INSERT INTO STOK_MASUK (id_barang, id_pengguna, jumlah, tanggal_masuk, catatan) VALUES (?, ?, ?, ?, ?)'
     );
-    for (const [nama, satuan, harga, stok, min] of BARANG_AWAL) {
+    for (const [nama, satuan, harga, stok, min] of barang) {
       const { lastInsertRowid } = insBarang.run(nama, satuan, harga, stok, min);
       // Stok awal dicatat sebagai stok masuk, supaya riwayat cocok dengan sisa stok.
       if (stok > 0) insMasuk.run(lastInsertRowid, admin, stok, hari, 'Stok awal');

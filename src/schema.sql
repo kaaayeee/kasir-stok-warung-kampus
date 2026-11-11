@@ -12,6 +12,10 @@
 --   - satu tanggal hanya punya satu jadwal (UNIQUE tanggal)
 --   - jam_tutup harus setelah jam_buka bila status buka (CHECK)
 --
+-- Tambahan setelah ERD revisi (desain halaman Kasir, Nov 2026):
+--   TRANSAKSI.nama_pelanggan dan TRANSAKSI.catatan (keduanya opsional).
+--   Database lama otomatis ditambah kolomnya oleh src/db.js.
+--
 -- Catatan tipe: SQLite tidak punya tipe date/time/decimal/boolean asli.
 --   date     -> TEXT 'YYYY-MM-DD'
 --   time     -> TEXT 'HH:MM' (24 jam)
@@ -52,7 +56,9 @@ CREATE TABLE IF NOT EXISTS TRANSAKSI (
   id_pengguna     INTEGER NOT NULL REFERENCES PENGGUNA(id_pengguna),
   waktu_transaksi TEXT    NOT NULL,
   metode_bayar    TEXT    NOT NULL CHECK (metode_bayar IN ('qris', 'tunai')),
-  total           INTEGER NOT NULL CHECK (total >= 0)
+  total           INTEGER NOT NULL CHECK (total >= 0),
+  nama_pelanggan  TEXT,   -- opsional (desain Kasir)
+  catatan         TEXT    -- opsional, mis. "tidak pedas"
 );
 
 CREATE TABLE IF NOT EXISTS DETAIL_TRANSAKSI (

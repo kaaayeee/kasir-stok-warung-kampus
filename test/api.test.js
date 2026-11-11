@@ -9,11 +9,26 @@ const { isiDataAwal } = require('../src/seed');
 const { buatApp } = require('../src/app');
 const { hariIni, tambahHari } = require('../src/lib/waktu');
 
+// Data barang khusus uji (tetap, tidak ikut berubah bila menu di seed.js diganti).
+// [nama, satuan, harga_jual, stok_awal, stok_minimum]
+const BARANG_UJI = [
+  ['Nasi Goreng', 'porsi', 12000, 20, 5],
+  ['Mie Goreng Telur', 'porsi', 10000, 15, 5],
+  ['Nasi Ayam Geprek', 'porsi', 13000, 4, 5], // sengaja menipis
+  ['Es Teh Manis', 'gelas', 4000, 40, 10],
+  ['Es Jeruk', 'gelas', 5000, 25, 10],
+  ['Kopi Hitam', 'gelas', 4000, 30, 5],
+  ['Air Mineral 600ml', 'botol', 4000, 24, 6],
+  ['Teh Botol', 'botol', 5000, 0, 6], // sengaja habis
+  ['Gorengan', 'pcs', 1000, 50, 10],
+  ['Kerupuk', 'bungkus', 1000, 30, 5],
+];
+
 function siapkan() {
   const ctx = {};
   before(async () => {
     ctx.db = bukaDatabase(':memory:');
-    isiDataAwal(ctx.db);
+    isiDataAwal(ctx.db, { barang: BARANG_UJI });
     ctx.server = buatApp(ctx.db).listen(0);
     await new Promise((r) => ctx.server.once('listening', r));
     ctx.base = `http://127.0.0.1:${ctx.server.address().port}/api`;
@@ -48,7 +63,7 @@ describe('Setup: database sesuai ERD revisi', () => {
     assert.deepEqual(kolom('STOK_MASUK'), ['id_masuk', 'id_barang', 'id_pengguna', 'jumlah', 'tanggal_masuk', 'catatan']);
     assert.deepEqual(kolom('STOK_KELUAR'), ['id_keluar', 'id_barang', 'id_pengguna', 'id_transaksi', 'jumlah', 'alasan', 'waktu_keluar']);
     assert.deepEqual(kolom('JADWAL_BUKA_TUTUP'), ['id_jadwal', 'id_pengguna', 'tanggal', 'jam_buka', 'jam_tutup', 'buka', 'catatan']);
-    assert.deepEqual(kolom('TRANSAKSI'), ['id_transaksi', 'id_pengguna', 'waktu_transaksi', 'metode_bayar', 'total']);
+    assert.deepEqual(kolom('TRANSAKSI'), ['id_transaksi', 'id_pengguna', 'waktu_transaksi', 'metode_bayar', 'total', 'nama_pelanggan', 'catatan']);
     assert.deepEqual(kolom('DETAIL_TRANSAKSI'), ['id_detail', 'id_transaksi', 'id_barang', 'jumlah', 'harga_satuan', 'subtotal']);
   });
 
@@ -426,5 +441,54 @@ describe('Masuk (login admin)', () => {
     const r = await ctx.call('POST', '/masuk', { email: 'dapoerbumimin@gmail.com' }, null);
     assert.equal(r.status, 400);
     assert.equal(r.body.field, 'kata_sandi');
+  });
+});
+
+describe('Pusat Bantuan', () => {
+  const ctx = siapkan();
+  test('/api/info menyertakan kontak pengembang (boleh kosong)', async () => {
+    const r = await ctx.call('GET', '/info', undefined, null);
+    assert.equal(r.status, 200);
+    assert.equal(typeof r.body.kontak.email, 'string');
+    assert.equal(typeof r.body.kontak.whatsapp, 'string');
+  });
+});
+
+describe('Kasir: nama pelanggan, catatan, nomor pesanan harian', () => {
+  const c = siapkan();
+
+  test('nama pelanggan & catatan tersimpan (opsional, dirapikan)', async () => {
+    const id = c.barang('Nasi Goreng').id_barang;
+    const r = await c.call('POST', '/transaksi', { metode_bayar: 'tunai', nama_pelanggan: '  Mutia ', catatan: 'Tidak pedas', items: [{ id_barang: id, jumlah: 1 }] });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.nama_pelanggan, 'Mutia');
+    assert.equal(r.body.catatan, 'Tidak pedas');
+    const tanpa = await c.call('POST', '/transaksi', { metode_bayar: 'qris', items: [{ id_barang: id, jumlah: 1 }] });
+    assert.equal(tanpa.body.nama_pelanggan, null);
+    assert.equal(tanpa.body.catatan, null);
+  });
+
+  test('nomor_harian berurutan 1, 2, ... dalam satu tanggal', async () => {
+    const { transaksi } = (await c.call('GET', '/transaksi')).body;
+    const urut = transaksi.map((t) => t.nomor_harian).sort((a, b) => a - b);
+    assert.deepEqual(urut, urut.map((_, i) => i + 1));
+  });
+
+  test('database lama tanpa kolom baru otomatis ditambah kolomnya', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const Database = require('better-sqlite3');
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'warung-')), 'lama.db');
+    const lama = new Database(file);
+    lama.exec(`CREATE TABLE TRANSAKSI (id_transaksi INTEGER PRIMARY KEY AUTOINCREMENT, id_pengguna INTEGER NOT NULL,
+               waktu_transaksi TEXT NOT NULL, metode_bayar TEXT NOT NULL, total INTEGER NOT NULL);
+               INSERT INTO TRANSAKSI (id_pengguna, waktu_transaksi, metode_bayar, total) VALUES (1, '2026-10-27 10:00:00', 'tunai', 5000);`);
+    lama.close();
+    const db = bukaDatabase(file);
+    const kolom = db.prepare('PRAGMA table_info(TRANSAKSI)').all().map((r) => r.name);
+    assert.ok(kolom.includes('nama_pelanggan') && kolom.includes('catatan'));
+    assert.equal(db.prepare('SELECT total FROM TRANSAKSI').get().total, 5000, 'data lama tetap ada');
+    db.close();
   });
 });

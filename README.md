@@ -8,7 +8,7 @@ Prototype Sprint 2 (yang tertinggal), dikerjakan urut sesuai arahan PM:
 | Task 2 | EP-01 US-03 | Jadwal buka tutup per hari + validasi jam | menu **Jadwal** |
 | Task 3 | EP-02 US-05 | Pesanan, QRIS/tunai, stok berkurang otomatis, log penjualan, < 30 detik | menu **Kasir** + Lainnya › Log penjualan |
 
-Database mengikuti **ERD revisi EP-01 US-01 (disetujui BA 26 Okt 2026)**: 7 tabel, tanpa kolom tambahan. Lihat `src/schema.sql`.
+Database mengikuti **ERD revisi EP-01 US-01 (disetujui BA 26 Okt 2026)**: 7 tabel. Satu-satunya tambahan: kolom opsional `nama_pelanggan` dan `catatan` di `TRANSAKSI` (dari desain halaman Kasir, Nov 2026 — **perlu dikabarkan ke BA**). Database lama otomatis ditambah kolomnya saat aplikasi dijalankan, data lama tetap aman. Lihat `src/schema.sql`.
 
 ## Cara menjalankan
 
@@ -25,7 +25,7 @@ Terminal akan menampilkan dua alamat:
 - `Laptop : http://localhost:3000` — buka di browser laptop
 - `HP     : http://192.168.x.x:3000` — buka di browser HP (**HP dan laptop harus di Wi-Fi yang sama**)
 
-Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi data awal. Buka aplikasi → masuk dengan akun admin dari `.env` (`ADMIN_EMAIL` / `ADMIN_KATA_SANDI`; contohnya ada di `.env.example`). Setelah masuk pertama kali, muncul onboarding 5 layar (bisa dilewati).
+Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi data awal. Buka aplikasi → masuk dengan akun admin dari `.env` (`ADMIN_EMAIL` / `ADMIN_KATA_SANDI`; contohnya ada di `.env.example`). Setelah masuk pertama kali, muncul onboarding 5 layar (bisa dilewati). Kontak di tombol **Hubungi Tim Pengembang** (Pusat Bantuan) diatur lewat `KONTAK_WA` / `KONTAK_EMAIL` di `.env`.
 
 > Kalau dari HP tidak bisa dibuka: izinkan Node.js di Windows Firewall (jaringan Private), atau pastikan Wi-Fi kampus tidak memblokir antar-perangkat (pakai hotspot HP sebagai alternatif).
 
@@ -35,7 +35,7 @@ Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi d
 |---|---|
 | `npm run dev` | Jalan + otomatis restart saat kode diubah |
 | `npm run db:reset` | Hapus database dan isi ulang data awal |
-| `npm test` | Uji mandiri otomatis (42 uji, pakai database sementara, data asli aman) |
+| `npm test` | Uji mandiri otomatis (46 uji, pakai database sementara, data asli aman) |
 
 ## Struktur
 
@@ -69,7 +69,7 @@ docs/                 penjelasan, hasil uji, screenshot
 
 ## Yang masih perlu dikonfirmasi (bukan bug)
 
-1. **Daftar barang asli** — yang ada sekarang CONTOH. Ganti di `src/seed.js` (`BARANG_AWAL`) lalu `npm run db:reset`, atau tambah lewat Lainnya › Kelola barang.
+1. **Daftar menu** diambil dari desain Kasir (13 menu). Stok awal mengikuti desain, stok minimum masih perkiraan (5). Ubah di `src/seed.js` (`BARANG_AWAL`) lalu `npm run db:reset`, atau lewat Lainnya › Kelola barang. Uji otomatis memakai data ujinya sendiri, jadi tidak terpengaruh.
 2. **QRIS hanya dicatat sebagai metode bayar**, tidak ada integrasi pembayaran.
 3. **Kembalian tunai** hanya dihitung di layar, tidak disimpan (tidak ada kolomnya di ERD).
 4. **Warung tutup lewat tengah malam** belum didukung (aturan jam tutup > jam buka).

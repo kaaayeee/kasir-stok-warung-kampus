@@ -66,7 +66,7 @@ body.auth-open .topbar, body.auth-open .bottomnav { visibility: hidden; }
 
 .logo-mark {
   display: inline-block; width: 36px; height: 36px; flex: none;
-  background: var(--a-logo);
+  background: var(--a-logo, var(--logo));
   -webkit-mask: url(/img/Logo.png) center / contain no-repeat;
   mask: url(/img/Logo.png) center / contain no-repeat;
 }

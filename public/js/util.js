@@ -124,6 +124,44 @@ export function clearErr(form) {
   form.querySelectorAll('[aria-invalid]').forEach((e) => e.setAttribute('aria-invalid', 'false'));
 }
 
+/** Ikon menu utama (isi penuh), dipakai di bottom nav dan kartu Beranda. */
+const ikonIsi = (d) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="${d}"/></svg>`;
+export const ikonMenu = {
+  kasir: ikonIsi('M7 2h7a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-2v1h7.2a1.5 1.5 0 0 1 1.47 1.2L21.6 14H2.4l.93-4.8A1.5 1.5 0 0 1 4.8 8H10V7H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM6.5 10.3a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm4 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm4 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm4 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM2 15.5h20V20a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 20zM9 17.8h6v1.4H9z'),
+  stok: ikonIsi('M8 2.5h8v7.5H8zM10.8 2.5h2.4v2.8h-2.4zM2 11.5h9.2v9H2zM5.4 11.5h2.4v2.8H5.4zM12.8 11.5H22v9h-9.2zM16.2 11.5h2.4v2.8h-2.4z'),
+  jadwal: ikonIsi('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5a1 1 0 1 0-2 0v5.4l3.8 2.3a1 1 0 1 0 1-1.7L13 11.3z'),
+  transaksi: ikonIsi('M5 2.5h14v19l-2.33-1.5-2.34 1.5L12 20l-2.33 1.5L7.33 20 5 21.5zM8 7h8v1.6H8zm0 4h8v1.6H8zm0 4h5v1.6H8z'),
+};
+
+/** Inisial nama untuk avatar: "Bu Mimin" → "BM". */
+export function inisial(nama) {
+  const kata = String(nama || '').trim().split(/\s+/).filter(Boolean);
+  return (kata.slice(0, 2).map((k) => k[0]).join('') || '?').toUpperCase();
+}
+
+/**
+ * Kode pesanan walk-up: WU-YYMMDD-NNN.
+ * tanggal 'YYYY-MM-DD' (atau waktu 'YYYY-MM-DD HH:MM:SS'), nomor = urutan transaksi hari itu.
+ */
+export function kodePesanan(tanggal, nomor) {
+  const [y, m, d] = String(tanggal).slice(0, 10).split('-');
+  return `WU-${y.slice(2)}${m}${d}-${String(nomor).padStart(3, '0')}`;
+}
+
+/** "porsi" → "Porsi" */
+export const kapital = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
+
+/** Status warung saat ini menurut jadwal hari ini (WIB). */
+export async function statusWarung() {
+  const { tanggal, jam } = sekarangWIB();
+  const { jadwal: j } = await api(`/jadwal/${tanggal}`);
+  if (!j) return { kelas: '', teks: 'Jadwal belum diatur' };
+  if (!j.buka) return { kelas: 'tutup', teks: 'Libur hari ini' };
+  if (jam < j.jam_buka) return { kelas: 'tutup', teks: `Tutup · buka ${jamTitik(j.jam_buka)}` };
+  if (jam >= j.jam_tutup) return { kelas: 'tutup', teks: 'Sudah tutup' };
+  return { kelas: 'buka', teks: `Buka · s/d ${jamTitik(j.jam_tutup)}` };
+}
+
 export const ikonCari = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 
 export function badgeStatus(status) {
