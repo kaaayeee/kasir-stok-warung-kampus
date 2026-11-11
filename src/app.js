@@ -1,12 +1,21 @@
 // Aplikasi Express: API + halaman web (folder public).
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
+const { akunAdmin } = require('./config');
 const { ValidasiError } = require('./lib/validasi');
 const { hariIni } = require('./lib/waktu');
 const layananBarang = require('./services/barang');
 const layananStok = require('./services/stok');
 const layananJadwal = require('./services/jadwal');
 const layananTransaksi = require('./services/transaksi');
+
+/** Bandingkan teks tanpa bocor waktu (cegah tebak kata sandi lewat lama respons). */
+function samaAman(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 
 function buatApp(db) {
   const barang = layananBarang(db);
@@ -38,6 +47,22 @@ function buatApp(db) {
 
   api.get('/info', (_req, res) => res.json({ hari_ini: hariIni(), versi: '0.2.0-sprint2' }));
   api.get('/pengguna', (_req, res) => res.json(db.prepare('SELECT * FROM PENGGUNA ORDER BY id_pengguna').all()));
+
+  // ---------- MASUK (login admin) ----------
+  // Email & kata sandi dicocokkan dengan .env (lihat config.akunAdmin).
+  api.post('/masuk', (req, res) => {
+    const body = req.body || {};
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const sandi = typeof body.kata_sandi === 'string' ? body.kata_sandi : '';
+    if (!email) throw new ValidasiError('Email wajib diisi.', 'email');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ValidasiError('Format email tidak valid.', 'email');
+    if (!sandi) throw new ValidasiError('Kata sandi wajib diisi.', 'kata_sandi');
+    const cocok = email === akunAdmin.email && samaAman(sandi, akunAdmin.kataSandi);
+    if (!cocok) throw new ValidasiError('Email atau kata sandi salah.', 'kata_sandi', 401);
+    const admin = db.prepare("SELECT * FROM PENGGUNA WHERE peran = 'admin' ORDER BY id_pengguna LIMIT 1").get();
+    if (!admin) throw new ValidasiError('Akun admin belum ada di database.', 'email', 500);
+    res.json({ pengguna: admin });
+  });
 
   // ---------- BARANG / daftar sisa stok ----------
   api.get('/barang', (req, res) => res.json(barang.daftar({ q: req.query.q, semua: req.query.semua === '1' })));

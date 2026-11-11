@@ -25,7 +25,7 @@ Terminal akan menampilkan dua alamat:
 - `Laptop : http://localhost:3000` — buka di browser laptop
 - `HP     : http://192.168.x.x:3000` — buka di browser HP (**HP dan laptop harus di Wi-Fi yang sama**)
 
-Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi data awal. Buka aplikasi → pilih **Bu Mimin** (admin) atau **Bu Sri** (pegawai).
+Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi data awal. Buka aplikasi → masuk dengan akun admin dari `.env` (`ADMIN_EMAIL` / `ADMIN_KATA_SANDI`; contohnya ada di `.env.example`). Setelah masuk pertama kali, muncul onboarding 5 layar (bisa dilewati).
 
 > Kalau dari HP tidak bisa dibuka: izinkan Node.js di Windows Firewall (jaringan Private), atau pastikan Wi-Fi kampus tidak memblokir antar-perangkat (pakai hotspot HP sebagai alternatif).
 
@@ -35,7 +35,7 @@ Saat pertama dijalankan, database (`data/warung.db`) dibuat otomatis dan diisi d
 |---|---|
 | `npm run dev` | Jalan + otomatis restart saat kode diubah |
 | `npm run db:reset` | Hapus database dan isi ulang data awal |
-| `npm test` | Uji mandiri otomatis (39 uji, pakai database sementara, data asli aman) |
+| `npm test` | Uji mandiri otomatis (42 uji, pakai database sementara, data asli aman) |
 
 ## Struktur
 
@@ -73,5 +73,5 @@ docs/                 penjelasan, hasil uji, screenshot
 2. **QRIS hanya dicatat sebagai metode bayar**, tidak ada integrasi pembayaran.
 3. **Kembalian tunai** hanya dihitung di layar, tidak disimpan (tidak ada kolomnya di ERD).
 4. **Warung tutup lewat tengah malam** belum didukung (aturan jam tutup > jam buka).
-5. **Login** masih berupa pilih nama (tanpa password) — cukup untuk prototype/uji, perlu diputuskan untuk versi rilis.
+5. **Login** hanya untuk admin. Email & kata sandi disimpan di `.env` (ERD belum punya kolomnya). Server masih memercayai header `X-Pengguna-Id` tanpa token sesi, dan "Lupa kata sandi" belum mengirim email. Cukup untuk prototype, perlu diputuskan untuk versi rilis.
 6. **Teknologi**: Node.js + Express + SQLite dipilih karena paling ringan dijalankan semua anggota. Kalau tim pakai stack lain, logika & aturan di `src/services/` bisa dipindah apa adanya.

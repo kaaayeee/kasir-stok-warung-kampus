@@ -1,13 +1,36 @@
 // Helper bersama: API, format angka/tanggal, toast, validasi form.
 
-const KUNCI_PENGGUNA = 'warung.pengguna';
+const KUNCI_PENGGUNA = 'warung.sesi';
+// Kunci lama dari layar "pilih pengguna" (sebelum ada login) dibuang supaya wajib masuk ulang.
+try { localStorage.removeItem('warung.pengguna'); } catch { /* abaikan */ }
 
+const KUNCI_ONBOARDING = 'warung.onboarding-selesai';
+
+function baca(store, kunci) {
+  try { return JSON.parse(store.getItem(kunci) || 'null'); } catch { return null; }
+}
+
+/**
+ * Sesi masuk. "Ingat saya" → localStorage (tetap ada setelah browser ditutup);
+ * tanpa "Ingat saya" → sessionStorage (hilang saat tab/browser ditutup).
+ */
 export const sesi = {
   get pengguna() {
-    try { return JSON.parse(localStorage.getItem(KUNCI_PENGGUNA) || 'null'); } catch { return null; }
+    return baca(sessionStorage, KUNCI_PENGGUNA) || baca(localStorage, KUNCI_PENGGUNA);
   },
-  set pengguna(p) {
-    try { localStorage.setItem(KUNCI_PENGGUNA, JSON.stringify(p)); } catch { /* abaikan */ }
+  masuk(p, ingat = false) {
+    this.keluar();
+    try { (ingat ? localStorage : sessionStorage).setItem(KUNCI_PENGGUNA, JSON.stringify(p)); } catch { /* abaikan */ }
+  },
+  keluar() {
+    try { localStorage.removeItem(KUNCI_PENGGUNA); } catch { /* abaikan */ }
+    try { sessionStorage.removeItem(KUNCI_PENGGUNA); } catch { /* abaikan */ }
+  },
+  get onboardingSelesai() {
+    try { return localStorage.getItem(KUNCI_ONBOARDING) === '1'; } catch { return false; }
+  },
+  set onboardingSelesai(v) {
+    try { v ? localStorage.setItem(KUNCI_ONBOARDING, '1') : localStorage.removeItem(KUNCI_ONBOARDING); } catch { /* abaikan */ }
   },
 };
 

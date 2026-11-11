@@ -1,4 +1,4 @@
-// Menu Lainnya: log penjualan, kelola barang, catatan waktu transaksi, ganti pengguna.
+// Menu Lainnya: log penjualan, kelola barang, catatan waktu transaksi, keluar.
 import { api, esc, rupiah, angka, toast, sesi, sekarangWIB, tanggalPanjang, setErr, clearErr, badgeStatus } from '../util.js';
 
 export async function render(app, sub, q) {
@@ -19,7 +19,7 @@ function menu(app) {
     <div class="card row">
       <span class="avatar">${esc(p.nama.replace(/^Bu\s+/i, '')[0])}</span>
       <div class="grow"><b>${esc(p.nama)}</b><div class="small muted">${p.peran === 'admin' ? 'Admin' : 'Pegawai'} · tercatat sebagai pencatat</div></div>
-      <button class="btn sm" id="ganti">Ganti</button>
+      <button class="btn sm" id="keluar">Keluar</button>
     </div>
     <h2>Menu</h2>
     <ul class="list link-list">
@@ -28,7 +28,9 @@ function menu(app) {
       <li><a href="#/lainnya/waktu"><span><b>Catatan waktu transaksi</b><div class="small muted">Hasil ukur &lt; 30 detik di HP ini</div></span></a></li>
     </ul>
     <p class="small muted" style="margin-top:20px">Kasir &amp; Stok Warung Kampus · Kelompok 7 · prototype Sprint 2 (US-02, US-03, US-05)</p>`;
-  app.querySelector('#ganti').addEventListener('click', () => window.dispatchEvent(new Event('warung:ganti-pengguna')));
+  app.querySelector('#keluar').addEventListener('click', () => {
+    if (confirm('Keluar dari akun ini?')) window.dispatchEvent(new Event('warung:keluar'));
+  });
 }
 
 // ---------------------------------------------------------------------

@@ -1,9 +1,11 @@
-// Router sederhana berbasis hash (#/kasir, #/stok/masuk, ...) + pemilih pengguna.
+// Router sederhana berbasis hash (#/kasir, #/stok/masuk, ...) + layar masuk & onboarding.
 import { api, sesi, esc, jamTitik, sekarangWIB } from './util.js';
 import * as kasir from './pages/kasir.js';
 import * as stok from './pages/stok.js';
 import * as jadwal from './pages/jadwal.js';
 import * as lainnya from './pages/lainnya.js';
+import { tampilkanMasuk } from './pages/auth.js';
+import { tampilkanOnboarding } from './pages/onboarding.js';
 
 const app = document.getElementById('app');
 let bersihkan = null;
@@ -22,7 +24,7 @@ function parseHash() {
 }
 
 async function navigasi() {
-  if (!sesi.pengguna) return tampilkanPemilih();
+  if (!sesi.pengguna) return mulaiMasuk();
   const { halaman, sub, q } = parseHash();
   const fn = rute[halaman] || rute.kasir;
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === halaman));
@@ -37,33 +39,25 @@ async function navigasi() {
   }
 }
 
-// ---------- Pengguna aktif ----------
-async function tampilkanPemilih() {
-  const daftar = await api('/pengguna').catch(() => []);
-  const el = document.createElement('div');
-  el.className = 'picker';
-  el.innerHTML = `
-    <div class="box">
-      <h1>Siapa yang memakai HP ini?</h1>
-      <p class="muted">Nama ini tercatat otomatis sebagai pencatat setiap stok, jadwal, dan transaksi.</p>
-      <div class="who">
-        ${daftar.map((p) => `
-          <button data-id="${p.id_pengguna}">
-            <span class="avatar">${esc(p.nama.replace(/^Bu\s+/i, '')[0] || '?')}</span>
-            <span><b>${esc(p.nama)}</b><span class="muted small">${p.peran === 'admin' ? 'Admin' : 'Pegawai'}</span></span>
-          </button>`).join('')}
-      </div>
-    </div>`;
-  el.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-id]');
-    if (!b) return;
-    sesi.pengguna = daftar.find((p) => p.id_pengguna === Number(b.dataset.id));
-    el.remove();
-    perbaruiHeader();
-    navigasi();
-  });
-  document.querySelectorAll('.picker').forEach((p) => p.remove());
-  document.body.appendChild(el);
+// ---------- Masuk & onboarding ----------
+let sedangMasuk = false;
+async function mulaiMasuk() {
+  if (sedangMasuk) return;
+  sedangMasuk = true;
+  try {
+    await tampilkanMasuk();
+    if (!sesi.onboardingSelesai) await tampilkanOnboarding();
+  } finally {
+    sedangMasuk = false;
+  }
+  perbaruiHeader();
+  navigasi();
+}
+
+function keluar() {
+  sesi.keluar();
+  app.replaceChildren();
+  mulaiMasuk();
 }
 
 // ---------- Header: status warung hari ini ----------
@@ -90,11 +84,11 @@ export async function perbaruiHeader() {
   }
 }
 
-document.getElementById('btn-user').addEventListener('click', tampilkanPemilih);
+document.getElementById('btn-user').addEventListener('click', () => (location.hash = '#/lainnya'));
 document.getElementById('status-warung').addEventListener('click', () => (location.hash = '#/jadwal'));
 window.addEventListener('hashchange', navigasi);
 window.addEventListener('warung:jadwal-berubah', perbaruiHeader);
-window.addEventListener('warung:ganti-pengguna', tampilkanPemilih);
+window.addEventListener('warung:keluar', keluar);
 setInterval(perbaruiHeader, 60_000);
 
 perbaruiHeader();

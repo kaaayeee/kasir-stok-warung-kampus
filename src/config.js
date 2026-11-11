@@ -14,4 +14,10 @@ module.exports = {
       ? ':memory:'
       : path.resolve(root, process.env.DB_FILE || 'data/warung.db'),
   timeZone: process.env.APP_TZ || 'Asia/Jakarta',
+  // Akun masuk admin. Disimpan di .env, bukan di tabel, karena ERD revisi
+  // belum punya kolom email/kata sandi. Nilai cadangan = contoh di .env.example.
+  akunAdmin: {
+    email: (process.env.ADMIN_EMAIL || 'dapoerbumimin@gmail.com').trim().toLowerCase(),
+    kataSandi: process.env.ADMIN_KATA_SANDI || 'dapoeradmin123',
+  },
 };

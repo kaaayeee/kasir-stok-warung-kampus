@@ -400,3 +400,31 @@ describe('Task 3 (EP-02 US-05): pesanan & pembayaran', () => {
     assert.ok(rata < 1000, `rata-rata ${rata.toFixed(1)} ms`);
   });
 });
+
+// =====================================================================
+describe('Masuk (login admin)', () => {
+  const ctx = siapkan();
+
+  test('email & kata sandi benar → data admin (Bu Mimin)', async () => {
+    const r = await ctx.call('POST', '/masuk', { email: ' DapoerBuMimin@gmail.com ', kata_sandi: 'dapoeradmin123' }, null);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.pengguna.nama, 'Bu Mimin');
+    assert.equal(r.body.pengguna.peran, 'admin');
+  });
+
+  test('kata sandi atau email salah ditolak dengan pesan yang sama', async () => {
+    const a = await ctx.call('POST', '/masuk', { email: 'dapoerbumimin@gmail.com', kata_sandi: 'salah' }, null);
+    const b = await ctx.call('POST', '/masuk', { email: 'orang@lain.com', kata_sandi: 'dapoeradmin123' }, null);
+    assert.equal(a.status, 401);
+    assert.equal(b.status, 401);
+    assert.equal(a.body.error, b.body.error);
+  });
+
+  test('isian kosong / format email salah ditolak', async () => {
+    assert.equal((await ctx.call('POST', '/masuk', {}, null)).body.field, 'email');
+    assert.equal((await ctx.call('POST', '/masuk', { email: 'bukan-email', kata_sandi: 'x' }, null)).body.field, 'email');
+    const r = await ctx.call('POST', '/masuk', { email: 'dapoerbumimin@gmail.com' }, null);
+    assert.equal(r.status, 400);
+    assert.equal(r.body.field, 'kata_sandi');
+  });
+});
